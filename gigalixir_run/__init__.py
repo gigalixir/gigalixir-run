@@ -122,6 +122,23 @@ def run(ctx, cmd):
     launch(ctx, cmd)
 
 @cli.command()
+@click.argument('customer_app_name', nargs=1)
+@click.argument('slug_url', nargs=1)
+@click.argument('cmd', nargs=-1)
+@click.pass_context
+@report_errors
+def bootstrap(ctx, customer_app_name, slug_url, cmd):
+    # Similar to init except does not ask api.gigalixir.com for the current slug url or configs.
+    # This also does not support SSH, observer, etc.
+    download_file(slug_url, "/app/%s.tar.gz" % customer_app_name)
+    with cd("/app"):
+        tar = tarfile.open("%s.tar.gz" % customer_app_name, "r:gz")
+        tar.extractall()
+        tar.close()
+    with cd('/app'):
+        os.execv('/app/bin/%s' % customer_app_name, ['/app/bin/%s' % customer_app_name] + list(cmd))
+
+@cli.command()
 @click.argument('version')
 @click.pass_context
 @report_errors
