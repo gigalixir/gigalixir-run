@@ -1,0 +1,8 @@
+erl_crash.dump
+venv
+gigalixir-run
+*.egg-info
+*.pyc
+.cache
+.eggs
+dist/
