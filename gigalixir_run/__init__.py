@@ -1,4 +1,5 @@
 import sys
+import urlparse
 from functools import wraps
 import contextlib
 import tarfile
@@ -151,27 +152,32 @@ def upgrade(ctx, version):
     with open('%s/APP_KEY' % kube_var_path, 'r') as f:
         app_key = f.read()
 
-    release_dir = "/app/releases/%s" % version
-    if not os.path.exists(release_dir):
-        os.makedirs(release_dir)
-
     r = requests.get("%s/api/apps/%s/releases/current" % (ctx.obj['host'], repo), auth = (repo, app_key)) 
     if r.status_code != 200:
         raise Exception(r)
     release = r.json()["data"]
     slug_url = release["slug_url"]
+
+    # get mix version from slug url. 
+    # TODO: make this explicit in the database.
+    # https://storage.googleapis.com/slug-bucket/production/sunny-wellgroomed-africanpiedkingfisher/releases/0.0.2/SHA/gigalixir_getting_started.tar.gz
+    mix_version = urlparse.urlparse(slug_url).path.split('/')[5]
     config = release["config"]
+
+    release_dir = "/app/releases/%s" % mix_version
+    if not os.path.exists(release_dir):
+        os.makedirs(release_dir)
 
     for key, value in config.iteritems():
         os.environ[key] = value
 
-    download_file(slug_url, "/app/releases/%s/%s.tar.gz" % (version, app))
-    with cd("/app/releases/%s" % version):
+    download_file(slug_url, "/app/releases/%s/%s.tar.gz" % (mix_version, app))
+    with cd("/app/releases/%s" % mix_version):
         tar = tarfile.open("%s.tar.gz" % app, "r:gz")
         tar.extractall()
         tar.close()
 
-    launch(ctx, ('upgrade', version))
+    launch(ctx, ('upgrade', mix_version))
 
 def launch(ctx, cmd):
     # These vars are set by the pod spec and are present EXCEPT when you ssh in manually
