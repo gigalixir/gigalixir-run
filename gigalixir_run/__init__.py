@@ -101,6 +101,8 @@ def init(ctx, repo, cmd, app_key):
         f.write(customer_app_name)
     with open('%s/APP_KEY' % kube_var_path, 'w') as f:
         f.write(app_key)
+    with open('%s/LOGPLEX_TOKEN' % kube_var_path, 'w') as f:
+        f.write(os.environ['LOGPLEX_TOKEN'])
 
     for key, value in config.iteritems():
         os.environ[key] = value
@@ -195,6 +197,8 @@ def launch(ctx, cmd):
         app_key = f.read()
     with open('%s/APP' % kube_var_path, 'r') as f:
         app = f.read()
+    with open('%s/LOGPLEX_TOKEN' % kube_var_path, 'r') as f:
+        logplex_token = f.read()
     os.environ['REPLACE_OS_VARS'] = "true"
     os.environ['RELX_REPLACE_OS_VARS'] = "true"
     os.environ['MY_NODE_NAME'] = "%s@%s" % (repo, ip)
@@ -218,14 +222,25 @@ def launch(ctx, cmd):
         os.environ[key] = value
 
     with cd('/app'):
+        # the following is no longer relevant since we
+        # started using dumb-init. we leave it here for a
+        # bit until we can verify it works for a period of time.
+        #
         # it's important this this replace the current process and become pid 1
         # otherwise it won't receive kubernetes SIGTERM signal. distillery
         # traps SIGTERM and issues an app shutdown. if this runs as a subprocess of pid 1
         # then distillery does not receive the SIGTERM, the app continues to run for 30
         # seconds until it receives a SIGKILL. it's nice to receive the SIGTERM so you can
         # shut down gracefully, drain requests, etc.
-        os.execv('/app/bin/%s' % app, ['/app/bin/%s' % app] + list(cmd))
-    
+        # os.execv('/app/bin/%s' % app, ['/app/bin/%s' % app] + list(cmd))
+        appname = repo
+        hostname = subprocess.check_output(["hostname"]).strip()
+        procid = hostname
+        log_shuttle_cmd = "/opt/gigalixir/bin/log-shuttle -logs-url=http://token:%s@35.190.23.220/logs -appname %s -hostname %s -procid %s" % (logplex_token, appname, hostname, procid)
+        ps = subprocess.Popen(['/app/bin/%s' % app] + list(cmd), stdout=subprocess.PIPE)
+        subprocess.check_call(log_shuttle_cmd.split(), stdin=ps.stdout)
+        ps.wait()
+
 def download_file(url, local_filename):
     # NOTE the stream=True parameter
     r = requests.get(url, stream=True)
