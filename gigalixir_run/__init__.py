@@ -82,6 +82,9 @@ def init(ctx, repo, cmd, app_key):
     config = release["config"]
     customer_app_name = release["customer_app_name"]
 
+    for key, value in config.iteritems():
+        os.environ[key] = value
+
     # HACK ALERT 
     # Save important env variables for observer and run-cmd when it SSHes in.
     # Normally these variables are set by the pod spec and injected by kubernetes, but 
@@ -104,9 +107,6 @@ def init(ctx, repo, cmd, app_key):
     with open('%s/LOGPLEX_TOKEN' % kube_var_path, 'w') as f:
         f.write(os.environ['LOGPLEX_TOKEN'])
 
-    for key, value in config.iteritems():
-        os.environ[key] = value
-    
     download_file(slug_url, "/app/%s.tar.gz" % customer_app_name)
     with cd("/app"):
         tar = tarfile.open("%s.tar.gz" % customer_app_name, "r:gz")
@@ -122,7 +122,7 @@ def init(ctx, repo, cmd, app_key):
 @click.pass_context
 @report_errors
 def run(ctx, cmd):
-    launch(ctx, cmd)
+    launch(ctx, cmd, log_shuttle=False)
 
 @cli.command()
 @click.argument('customer_app_name', nargs=1)
@@ -181,7 +181,7 @@ def upgrade(ctx, version):
 
     launch(ctx, ('upgrade', mix_version))
 
-def launch(ctx, cmd):
+def launch(ctx, cmd, log_shuttle=True):
     # These vars are set by the pod spec and are present EXCEPT when you ssh in manually
     # as is the case when you run remote observer or want a remote_console. In those cases
     # we pull them from the file system instead. It's a bit of a hack. The init script
@@ -206,6 +206,7 @@ def launch(ctx, cmd):
     os.environ['LC_ALL'] = "en_US.UTF-8"
     os.environ['LIBCLUSTER_KUBERNETES_SELECTOR'] = "repo=%s" % repo
     os.environ['LIBCLUSTER_KUBERNETES_NODE_BASENAME'] = repo
+    os.environ['LOGPLEX_TOKEN'] = logplex_token
 
     # this is sort of dangerous. the current release
     # might have changed between here and when init
@@ -233,13 +234,16 @@ def launch(ctx, cmd):
         # seconds until it receives a SIGKILL. it's nice to receive the SIGTERM so you can
         # shut down gracefully, drain requests, etc.
         # os.execv('/app/bin/%s' % app, ['/app/bin/%s' % app] + list(cmd))
-        appname = repo
-        hostname = subprocess.check_output(["hostname"]).strip()
-        procid = hostname
-        log_shuttle_cmd = "/opt/gigalixir/bin/log-shuttle -logs-url=http://token:%s@35.190.23.220/logs -appname %s -hostname %s -procid %s" % (logplex_token, appname, hostname, procid)
-        ps = subprocess.Popen(['/app/bin/%s' % app] + list(cmd), stdout=subprocess.PIPE)
-        subprocess.check_call(log_shuttle_cmd.split(), stdin=ps.stdout)
-        ps.wait()
+        if log_shuttle == True:
+            appname = repo
+            hostname = subprocess.check_output(["hostname"]).strip()
+            procid = hostname
+            log_shuttle_cmd = "/opt/gigalixir/bin/log-shuttle -logs-url=http://token:%s@35.190.23.220/logs -appname %s -hostname %s -procid %s" % (logplex_token, appname, hostname, procid)
+            ps = subprocess.Popen(['/app/bin/%s' % app] + list(cmd), stdout=subprocess.PIPE)
+            subprocess.check_call(log_shuttle_cmd.split(), stdin=ps.stdout)
+            ps.wait()
+        else:
+            os.execv('/app/bin/%s' % app, ['/app/bin/%s' % app] + list(cmd))
 
 def download_file(url, local_filename):
     # NOTE the stream=True parameter
