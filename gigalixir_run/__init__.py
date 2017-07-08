@@ -227,7 +227,15 @@ def launch(ctx, cmd, log_shuttle=True):
             appname = repo
             hostname = subprocess.check_output(["hostname"]).strip()
             procid = hostname
-            log_shuttle_cmd = "/opt/gigalixir/bin/log-shuttle -logs-url=http://token:%s@post.logs.gigalixir.com/logs -appname %s -hostname %s -procid %s" % (logplex_token, appname, hostname, procid)
+            
+            # carefully tuned logshuttle params to ensure infinite loops don't overload logplex
+            # 1500 total log lines can be buffered before we start dropping logs.
+            # in the event of a crash 1000 lines will be flushed out, the rest will be dropped.
+            # in an infinite loop scenario, we send 10 logs at a time to logplex as fast as we can
+            # if logs come in faster than that rate, some logs will be dropped.
+            back_buff = 50
+            batch_size = 500
+            log_shuttle_cmd = "/opt/gigalixir/bin/log-shuttle -logs-url=http://token:%s@post.logs.gigalixir.com/logs -appname %s -hostname %s -procid %s -back-buff %s -batch-size %s" % (logplex_token, appname, hostname, procid, back_buff, batch_size)
             ps = subprocess.Popen(['/app/bin/%s' % app] + list(cmd), stdout=subprocess.PIPE)
             subprocess.check_call(log_shuttle_cmd.split(), stdin=ps.stdout)
             ps.wait()
