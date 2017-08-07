@@ -238,7 +238,7 @@ def launch(ctx, cmd, log_shuttle=True):
             appname = repo
             hostname = subprocess.check_output(["hostname"]).strip()
             procid = hostname
-            log_shuttle_cmd = "/opt/gigalixir/bin/log-shuttle -logs-url=http://token:%s@35.190.23.220/logs -appname %s -hostname %s -procid %s" % (logplex_token, appname, hostname, procid)
+            log_shuttle_cmd = "/opt/gigalixir/bin/log-shuttle -logs-url=http://token:%s@post.logs.gigalixir.com/logs -appname %s -hostname %s -procid %s" % (logplex_token, appname, hostname, procid)
             ps = subprocess.Popen(['/app/bin/%s' % app] + list(cmd), stdout=subprocess.PIPE)
             subprocess.check_call(log_shuttle_cmd.split(), stdin=ps.stdout)
             ps.wait()

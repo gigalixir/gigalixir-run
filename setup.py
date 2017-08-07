@@ -12,6 +12,10 @@ setup(
         'requests~=2.13.0',
         'rollbar~=0.13.11',
 
+        # I guess this is required to peg six to 1.9.0 
+        # which rollbar requires.
+        'six~=1.9.0',
+
         # heroku/cedar:14 is old. it uses python 2.7.6
         # it needs an ssl upgrade to support SNI.
         'urllib3~=1.20',
