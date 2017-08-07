@@ -66,7 +66,7 @@ def init(ctx, repo, cmd, app_key):
     # at container startup.
     update_authorized_keys_cmd = "curl https://api.gigalixir.com/api/apps/%s/ssh_keys -u %s:%s | jq -r '.data | .[]' > /root/.ssh/authorized_keys" % (repo, repo, app_key)
 
-    # subprocess.check_call(['/bin/bash', '-c', update_authorized_keys_cmd])
+    subprocess.check_call(['/bin/bash', '-c', update_authorized_keys_cmd])
 
     p = subprocess.Popen(['crontab'], stdin=subprocess.PIPE)
     p.communicate("* * * * * %s && echo $(date) >> /var/log/cron.log\n" % update_authorized_keys_cmd)
@@ -223,17 +223,6 @@ def launch(ctx, cmd, log_shuttle=True):
         os.environ[key] = value
 
     with cd('/app'):
-        # the following is no longer relevant since we
-        # started using dumb-init. we leave it here for a
-        # bit until we can verify it works for a period of time.
-        #
-        # it's important this this replace the current process and become pid 1
-        # otherwise it won't receive kubernetes SIGTERM signal. distillery
-        # traps SIGTERM and issues an app shutdown. if this runs as a subprocess of pid 1
-        # then distillery does not receive the SIGTERM, the app continues to run for 30
-        # seconds until it receives a SIGKILL. it's nice to receive the SIGTERM so you can
-        # shut down gracefully, drain requests, etc.
-        # os.execv('/app/bin/%s' % app, ['/app/bin/%s' % app] + list(cmd))
         if log_shuttle == True:
             appname = repo
             hostname = subprocess.check_output(["hostname"]).strip()
