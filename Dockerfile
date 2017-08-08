@@ -1,6 +1,6 @@
 FROM heroku/cedar:14
 
-RUN apt-get update && apt-get -y install jq python-pip
+RUN apt-get update && apt-get -y install jq python-pip wkhtmltopdf pdftk xvfb
 RUN pip install -U pip setuptools
 RUN wget https://github.com/Yelp/dumb-init/releases/download/v1.2.0/dumb-init_1.2.0_amd64.deb
 RUN dpkg -i dumb-init_*.deb
