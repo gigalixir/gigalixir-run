@@ -207,6 +207,7 @@ def launch(ctx, cmd, log_shuttle=True):
     os.environ['LIBCLUSTER_KUBERNETES_SELECTOR'] = "repo=%s" % repo
     os.environ['LIBCLUSTER_KUBERNETES_NODE_BASENAME'] = repo
     os.environ['LOGPLEX_TOKEN'] = logplex_token
+    port = os.environ['PORT']
 
     # this is sort of dangerous. the current release
     # might have changed between here and when init
@@ -226,13 +227,26 @@ def launch(ctx, cmd, log_shuttle=True):
         if log_shuttle == True:
             appname = repo
             hostname = subprocess.check_output(["hostname"]).strip()
-            procid = hostname
+
+            # send some info through the log shuttle really quick to inform the customer
+            # that their app is attempting to start.
+            log(logplex_token, appname, hostname, "Attempting to start '%s' on host '%s'\nAttempting health checks on port %s\n" % (appname, hostname, port))
+            procid = ' '.join(cmd)
             log_shuttle_cmd = "/opt/gigalixir/bin/log-shuttle -logs-url=http://token:%s@post.logs.gigalixir.com/logs -appname %s -hostname %s -procid %s" % (logplex_token, appname, hostname, procid)
             ps = subprocess.Popen(['/app/bin/%s' % app] + list(cmd), stdout=subprocess.PIPE)
             subprocess.check_call(log_shuttle_cmd.split(), stdin=ps.stdout)
             ps.wait()
         else:
             os.execv('/app/bin/%s' % app, ['/app/bin/%s' % app] + list(cmd))
+
+def log(logplex_token, appname, hostname, line):
+    read, write = os.pipe()
+    os.write(write, line)
+    os.close(write)
+
+    procid = "gigalixir-run"
+    log_shuttle_cmd = "/opt/gigalixir/bin/log-shuttle -logs-url=http://token:%s@post.logs.gigalixir.com/logs -appname %s -hostname %s -procid %s" % (logplex_token, appname, hostname, procid)
+    subprocess.check_call(log_shuttle_cmd.split(), stdin=read)
 
 def download_file(url, local_filename):
     # NOTE the stream=True parameter
