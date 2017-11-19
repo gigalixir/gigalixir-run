@@ -234,7 +234,7 @@ def launch(ctx, cmd, log_shuttle=True):
             if port != None:
                 log(logplex_token, appname, hostname, "Attempting to start '%s' on host '%s'\nAttempting health checks on port %s\n" % (appname, hostname, port))
             procid = ' '.join(cmd)
-            log_shuttle_cmd = "/opt/gigalixir/bin/log-shuttle -logs-url=http://token:%s@post.logs.gigalixir.com/logs -appname %s -hostname %s -procid %s" % (logplex_token, appname, hostname, procid)
+            log_shuttle_cmd = "/opt/gigalixir/bin/log-shuttle -logs-url=http://token:%s@post.logs.gigalixir.com/logs -appname %s -hostname %s -procid %s -num-outlets 1 -batch-size=50" % (logplex_token, appname, hostname, procid)
             ps = subprocess.Popen(['/app/bin/%s' % app] + list(cmd), stdout=subprocess.PIPE)
             subprocess.check_call(log_shuttle_cmd.split(), stdin=ps.stdout)
             ps.wait()
