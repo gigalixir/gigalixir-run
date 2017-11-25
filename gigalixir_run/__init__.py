@@ -36,6 +36,8 @@ def report_errors(f):
     def wrapper(*args, **kwds):
         try:
             f(*args, **kwds)
+        except SystemExit:
+            pass
         except:
             rollbar.report_exc_info()
             raise
