@@ -11,6 +11,7 @@ import os
 import json
 import click
 import urllib3.contrib.pyopenssl
+import signal
 urllib3.contrib.pyopenssl.inject_into_urllib3()
 
 @click.group()
@@ -233,6 +234,13 @@ def launch(ctx, cmd, log_shuttle=True):
             # port is None when running remote_console or something like that.
             if port != None:
                 log(logplex_token, appname, hostname, "Attempting to start '%s' on host '%s'\nAttempting health checks on port %s\n" % (appname, hostname, port))
+
+                # log when shutting down.
+                def handle_sigterm(signum, frame):
+                    log(logplex_token, appname, hostname, "Shutting down '%s' on host '%s'\n" % (appname, hostname))
+                    sys.exit(0)
+                signal.signal(signal.SIGTERM, handle_sigterm)
+
             procid = ' '.join(cmd)
             log_shuttle_cmd = "/opt/gigalixir/bin/log-shuttle -logs-url=http://token:%s@post.logs.gigalixir.com/logs -appname %s -hostname %s -procid %s -num-outlets 1 -batch-size=5 -back-buff=5000" % (logplex_token, appname, hostname, procid)
             ps = subprocess.Popen(['/app/bin/%s' % app] + list(cmd), stdout=subprocess.PIPE)
