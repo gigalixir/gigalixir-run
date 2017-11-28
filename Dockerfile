@@ -17,8 +17,10 @@ ENTRYPOINT ["/usr/bin/dumb-init", "--", "gigalixir_run"]
 
 RUN mkdir -p /app
 RUN mkdir -p /opt/gigalixir
+RUN mkdir -p /release-config
 ADD . /opt/gigalixir
 COPY etc/ssh/sshd_config /etc/ssh/sshd_config
+COPY vm.args /release-config/vm.args
 WORKDIR /opt/gigalixir
 
 RUN python setup.py install
