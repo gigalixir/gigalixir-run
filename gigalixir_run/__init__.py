@@ -12,6 +12,7 @@ import json
 import click
 import urllib3.contrib.pyopenssl
 import signal
+import pystache
 urllib3.contrib.pyopenssl.inject_into_urllib3()
 
 @click.group()
@@ -127,6 +128,18 @@ def init(ctx, repo, cmd, app_key):
 def run(ctx, cmd):
     launch(ctx, cmd, log_shuttle=False)
 
+def generate_vmargs(node_name, cookie):
+    script_dir = os.path.dirname(__file__) #<-- absolute dir the script is in
+    rel_path = "templates/vm.args.mustache"
+    template_path = os.path.join(script_dir, rel_path)
+    vmargs_path = "/release-config/vm.args"
+
+    with open(template_path, "r") as f:
+        template = f.read()
+        vmargs = pystache.render(template, {"MY_NODE_NAME": node_name, "MY_COOKIE": cookie})
+        with open(vmargs_path, "w") as g:
+            g.write(vmargs)
+
 @cli.command()
 @click.argument('customer_app_name', nargs=1)
 @click.argument('slug_url', nargs=1)
@@ -202,6 +215,7 @@ def launch(ctx, cmd, log_shuttle=True):
         app = f.read()
     with open('%s/LOGPLEX_TOKEN' % kube_var_path, 'r') as f:
         logplex_token = f.read()
+    os.environ['GIGALIXIR_DEFAULT_VMARGS'] = "true"
     os.environ['REPLACE_OS_VARS'] = "true"
     os.environ['RELX_REPLACE_OS_VARS'] = "true"
     os.environ['MY_NODE_NAME'] = "%s@%s" % (repo, ip)
@@ -225,6 +239,18 @@ def launch(ctx, cmd, log_shuttle=True):
     for key, value in config.iteritems():
         os.environ[key] = value
     port = os.environ.get('PORT')
+
+    if os.environ['GIGALIXIR_DEFAULT_VMARGS'].lower() == "true":
+        # bypass all the distillery vm.args stuff and use our own
+        # we manually set VMARGS_PATH to say to distillery, use this one
+        # not any of the million other possible vm.args
+        # this means we have to do variable substitution ourselves though =(
+        generate_vmargs(os.environ['MY_NODE_NAME'], os.environ['MY_COOKIE'])
+
+        # this needs to be here instead of in the kubernetes spec because
+        # we need it for all commands e.g. remote_console, not just init
+        # os.environ['RELEASE_CONFIG_DIR'] = "/release-config"
+        os.environ['VMARGS_PATH'] = "/release-config/vm.args"
 
     with cd('/app'):
         if log_shuttle == True:
