@@ -128,6 +128,7 @@ def init(ctx, repo, cmd, app_key):
 def run(ctx, cmd):
     launch(ctx, cmd, log_shuttle=False)
 
+
 def generate_vmargs(node_name, cookie):
     script_dir = os.path.dirname(__file__) #<-- absolute dir the script is in
     rel_path = "templates/vm.args.mustache"
@@ -270,7 +271,7 @@ def launch(ctx, cmd, log_shuttle=True):
                 signal.signal(signal.SIGTERM, handle_sigterm)
 
             procid = ' '.join(cmd)
-            log_shuttle_cmd = "/opt/gigalixir/bin/log-shuttle -logs-url=http://token:%s@post.logs.gigalixir.com/logs -appname %s -hostname %s -procid %s -num-outlets 1 -batch-size=5 -back-buff=5000" % (logplex_token, appname, hostname, procid)
+            log_shuttle_cmd = "/opt/gigalixir/bin/log-shuttle -logs-url=http://token:%s@post.logs.gigalixir.com/logs -appname %s -hostname %s -procid %s -num-outlets 1 -batch-size=5 -back-buff=5000" % (logplex_token, appname, hostname, hostname)
             ps = subprocess.Popen(['/app/bin/%s' % app] + list(cmd), stdout=subprocess.PIPE)
             subprocess.check_call(log_shuttle_cmd.split(), stdin=ps.stdout)
             ps.wait()
