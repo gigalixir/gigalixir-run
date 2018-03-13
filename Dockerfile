@@ -9,6 +9,7 @@ RUN dpkg -i dumb-init_*.deb
 # from setup.py fails with: No package 'libffi' found
 # but works here.
 RUN pip install pyOpenSSL
+RUN gem install foreman
 
 # Port is always 4000 for no good reason.
 ENV PORT 4000
@@ -18,8 +19,8 @@ ENTRYPOINT ["/usr/bin/dumb-init", "--", "gigalixir_run"]
 RUN mkdir -p /app
 RUN mkdir -p /opt/gigalixir
 RUN mkdir -p /release-config
-ADD . /opt/gigalixir
 COPY etc/ssh/sshd_config /etc/ssh/sshd_config
+ADD . /opt/gigalixir
 WORKDIR /opt/gigalixir
 
 RUN python setup.py install

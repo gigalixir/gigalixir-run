@@ -119,7 +119,7 @@ def init(ctx, repo, cmd, app_key):
 
     epmd_path = find('epmd', '/app')
     os.symlink(epmd_path, '/usr/local/bin/epmd')
-    launch(ctx, cmd)
+    launch(ctx, cmd, use_procfile=True)
 
 @cli.command()
 @click.argument('cmd', nargs=-1)
@@ -198,7 +198,7 @@ def upgrade(ctx, version):
 
     launch(ctx, ('upgrade', mix_version))
 
-def launch(ctx, cmd, log_shuttle=True):
+def launch(ctx, cmd, log_shuttle=True, use_procfile=False):
     # These vars are set by the pod spec and are present EXCEPT when you ssh in manually
     # as is the case when you run remote observer or want a remote_console. In those cases
     # we pull them from the file system instead. It's a bit of a hack. The init script
@@ -254,6 +254,9 @@ def launch(ctx, cmd, log_shuttle=True):
         os.environ['VMARGS_PATH'] = "/release-config/vm.args"
 
     with cd('/app'):
+        os.environ['GIGALIXIR_APP_NAME'] = app
+        os.environ['GIGALIXIR_COMMAND'] = ' '.join(cmd)
+        os.environ['PYTHONIOENCODING'] = 'utf-8'
         if log_shuttle == True:
             appname = repo
             hostname = subprocess.check_output(["hostname"]).strip()
@@ -272,11 +275,18 @@ def launch(ctx, cmd, log_shuttle=True):
 
             procid = ' '.join(cmd)
             log_shuttle_cmd = "/opt/gigalixir/bin/log-shuttle -logs-url=http://token:%s@post.logs.gigalixir.com/logs -appname %s -hostname %s -procid %s -num-outlets 1 -batch-size=5 -back-buff=5000" % (logplex_token, appname, hostname, hostname)
-            ps = subprocess.Popen(['/app/bin/%s' % app] + list(cmd), stdout=subprocess.PIPE)
+            if use_procfile:
+                ps = subprocess.Popen(['foreman', 'start', '--color', '--no-timestamp', '-f', '/opt/gigalixir/Procfile'], stdout=subprocess.PIPE)
+            else:
+                ps = subprocess.Popen(['/app/bin/%s' % app] + list(cmd), stdout=subprocess.PIPE)
             subprocess.check_call(log_shuttle_cmd.split(), stdin=ps.stdout)
             ps.wait()
         else:
-            os.execv('/app/bin/%s' % app, ['/app/bin/%s' % app] + list(cmd))
+            if use_procfile:
+                # is this ever used?
+                os.execv('/app/bin/%s' % app, ['foreman', '--color', '--no-timestamp', 'start', '-f', '/opt/gigalixir/Procfile'])
+            else:
+                os.execv('/app/bin/%s' % app, ['/app/bin/%s' % app] + list(cmd))
 
 def log(logplex_token, appname, hostname, line):
     read, write = os.pipe()
