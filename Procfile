@@ -1,2 +1,4 @@
 # this is the default Procfile used if the user does not specify one
-web: mix phoenix.server
+# TODO: should upgrade, remote_console, etc be customizable like this
+# init command is?
+web: /app/bin/$GIGALIXIR_APP_NAME $GIGALIXIR_COMMAND
