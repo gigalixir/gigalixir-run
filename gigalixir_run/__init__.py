@@ -299,11 +299,10 @@ def launch(ctx, cmd, log_shuttle=True, use_procfile=False):
                 os.execv('/app/bin/%s' % app, ['/app/bin/%s' % app] + list(cmd))
 
 def procfile_path(cwd):
-    return '/opt/gigalixir/Procfile'
-    # if not os.path.exists("%s/Procfile" % cwd):
-    #     return '/opt/gigalixir/Procfile'
-    # else:
-    #     return 'Procfile'
+    if not os.path.exists("%s/Procfile" % cwd):
+        return '/opt/gigalixir/Procfile'
+    else:
+        return 'Procfile'
 
 def load_profile(cwd):
     click.echo("loading profile")
