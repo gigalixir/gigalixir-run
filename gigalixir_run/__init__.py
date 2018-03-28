@@ -121,7 +121,8 @@ def init(ctx, repo, cmd, app_key):
         tar.close()
 
     epmd_path = find('epmd', '/app')
-    os.symlink(epmd_path, '/usr/local/bin/epmd')
+    if epmd_path:
+        os.symlink(epmd_path, '/usr/local/bin/epmd')
     launch(ctx, cmd, use_procfile=True)
 
 @cli.command()
@@ -210,6 +211,10 @@ def launch(ctx, cmd, log_shuttle=True, use_procfile=False):
     kube_var_path = "/kube-env-vars"
     with open('%s/MY_POD_IP' % kube_var_path, 'r') as f:
         ip = f.read()
+
+    # TODO: now that we are no longer elixir-only, some of these things should be moved so
+    # that they are only done for elixir apps. For example, ERLANG_COOKIE, vm.args stuff
+    # REPLACE_OS_VARS, MY_NODE_NAME, libcluster stuff.
     with open('%s/ERLANG_COOKIE' % kube_var_path, 'r') as f:
         erlang_cookie = f.read()
     with open('%s/REPO' % kube_var_path, 'r') as f:
