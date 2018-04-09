@@ -114,7 +114,6 @@ def init(ctx, repo, cmd, app_key):
 
     download_file(slug_url, "/app/%s.tar.gz" % customer_app_name)
 
-    click.echo("extracting")
     with cd("/app"):
         tar = tarfile.open("%s.tar.gz" % customer_app_name, "r:gz")
         tar.extractall()
@@ -203,7 +202,6 @@ def upgrade(ctx, version):
     launch(ctx, ('upgrade', mix_version))
 
 def launch(ctx, cmd, log_shuttle=True, use_procfile=False):
-    click.echo("launching")
     # These vars are set by the pod spec and are present EXCEPT when you ssh in manually
     # as is the case when you run remote observer or want a remote_console. In those cases
     # we pull them from the file system instead. It's a bit of a hack. The init script
@@ -310,13 +308,11 @@ def procfile_path(cwd):
         return 'Procfile'
 
 def load_profile(cwd):
-    click.echo("loading profile")
     for f in glob.glob("%s/.profile.d/*.sh" % cwd):
         source(f)
 
 # from http://pythonwise.blogspot.com/2010/04/sourcing-shell-script.html
 def source(script, update=1):
-    click.echo("sourcing %s" % script)
     pipe = subprocess.Popen(". %s; env" % script, stdout=subprocess.PIPE, shell=True)
     data = pipe.communicate()[0]
 

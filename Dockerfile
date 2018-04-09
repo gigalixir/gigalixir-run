@@ -20,6 +20,7 @@ RUN mkdir -p /app
 RUN mkdir -p /opt/gigalixir
 RUN mkdir -p /release-config
 COPY etc/ssh/sshd_config /etc/ssh/sshd_config
+COPY bin/build-slug /bin/build-slug
 ADD . /opt/gigalixir
 WORKDIR /opt/gigalixir
 
