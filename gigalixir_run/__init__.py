@@ -303,6 +303,8 @@ def launch(ctx, cmd, log_shuttle=True, use_procfile=False):
 
 def procfile_path(cwd):
     if not os.path.exists("%s/Procfile" % cwd):
+        # this is still necessary because the distillery buildpack does not
+        # put the Procfile inside the distilery release tarball.
         return '/opt/gigalixir/Procfile'
     else:
         return 'Procfile'
