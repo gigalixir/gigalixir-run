@@ -12,5 +12,5 @@ docker run --rm -P -e APP_KEY=$APP_KEY -e MY_POD_IP=127.0.0.1 -e ERLANG_COOKIE=1
 # Deploy
 
 docker build --rm -t us.gcr.io/gigalixir-152404/run .
-sudo gcloud docker -- push us.gcr.io/gigalixir-152404/run
+gcloud docker -- push us.gcr.io/gigalixir-152404/run
 
