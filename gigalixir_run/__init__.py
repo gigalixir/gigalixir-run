@@ -234,6 +234,14 @@ def launch(ctx, cmd, log_shuttle=True, use_procfile=False):
     os.environ['LIBCLUSTER_KUBERNETES_NODE_BASENAME'] = repo
     os.environ['LOGPLEX_TOKEN'] = logplex_token
 
+    # this looks especially dangerous to me. but it seems to be okay.
+    # we need it during init and remote_console so that .profile.d is sourced properly
+    # and iex, mix, erl can be found. the .profile.d scripts like to set the PATH to
+    # $HOME/... which needs to be /app and not /root.
+    # when SSHing in as root though, you need root's home folder to be /root because that
+    # is where the .ssh/authorized_keys are.
+    os.environ['HOME'] = "/app"
+
     # this is sort of dangerous. the current release
     # might have changed between here and when init
     # was called. that could cause some confusion..
