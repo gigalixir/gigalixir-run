@@ -14,6 +14,7 @@ import click
 import urllib3.contrib.pyopenssl
 import signal
 import pystache
+import distutils.spawn
 urllib3.contrib.pyopenssl.inject_into_urllib3()
 
 @click.group()
@@ -297,9 +298,29 @@ def launch(ctx, cmd, log_shuttle=True, use_procfile=False):
         else:
             if use_procfile:
                 # is this ever used?
-                os.execv('/app/bin/%s' % app, ['foreman', 'start', '-d', '.', '--color', '--no-timestamp', '-f', procfile_path(os.getcwd())])
+                # os.execv('/app/bin/%s' % app, ['foreman', 'start', '-d', '.', '--color', '--no-timestamp', '-f', procfile_path(os.getcwd())])
+                raise Exception("this should not happen 001")
             else:
-                os.execv('/app/bin/%s' % app, ['/app/bin/%s' % app] + list(cmd))
+                # kind of a hack here. if this is a distillery app, then we use the distillery boot script
+                # if it is a mix app, we run something like
+                # iex --name remsh@127.0.0.1 --cookie bar --remsh foo@127.0.0.1
+                # TODO: observer?
+                # TODO: upgrades?
+                # TODO: run?
+                # TODO: migrate?
+                # TODO: distillery?
+                app_path = '/app/bin/%s' % app
+                if is_exe(app_path):
+                    os.execv(app_path, [app_path] + list(cmd))
+                else:
+                    if list(cmd) == ['remote_console']:
+                        iex_path = distutils.spawn.find_executable('iex')
+                        os.execv(iex_path, [iex_path, '--name', 'remsh@%s' % ip, '--cookie', os.environ['MY_COOKIE'], '--remsh', os.environ['MY_NODE_NAME']])
+                    else:
+                        raise Exception('You must use Distillery to run %s.' % ' '.join(list(cmd)))
+
+def is_exe(fpath):
+    return os.path.isfile(fpath) and os.access(fpath, os.X_OK)
 
 def procfile_path(cwd):
     if not os.path.exists("%s/Procfile" % cwd):
