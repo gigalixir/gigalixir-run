@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+
+# from https://github.com/gliderlabs/herokuish/blob/e4bdd0d099171b464707d91ac590225a61357a7a/include/procfile.bash#L100
+procfile-load-profile() {
+        shopt -s nullglob
+        for file in /etc/profile.d/*.sh; do
+                source "$file"
+        done
+        mkdir -p "$1/.profile.d"
+        for file in $1/.profile.d/*.sh; do
+                source "$file"
+        done
+        shopt -u nullglob
+        hash -r
+}
+
+HOME=/app procfile-load-profile /app
+

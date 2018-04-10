@@ -274,6 +274,12 @@ def launch(ctx, cmd, log_shuttle=True, use_procfile=False):
         os.environ['GIGALIXIR_COMMAND'] = ' '.join(cmd)
         os.environ['PYTHONIOENCODING'] = 'utf-8'
 
+        # even though /root/.bashrc loads the profile, this
+        # still needs to be here for the init case. the init
+        # case i.e. docker run ... gigalixir-run init does not
+        # start bash so .bashrc is not sourced.
+        # ssh into this container runs .bashrc so the user
+        # has access to mix and stuff
         load_profile(os.getcwd())
 
         if log_shuttle == True:

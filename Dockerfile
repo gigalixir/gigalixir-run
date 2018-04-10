@@ -14,6 +14,7 @@ RUN gem install foreman
 # Port is always 4000 for no good reason.
 ENV PORT 4000
 EXPOSE 4000
+EXPOSE 22
 ENTRYPOINT ["/usr/bin/dumb-init", "--", "gigalixir_run"]
 
 RUN mkdir -p /app
@@ -22,6 +23,7 @@ RUN mkdir -p /release-config
 COPY etc/ssh/sshd_config /etc/ssh/sshd_config
 ADD . /opt/gigalixir
 WORKDIR /opt/gigalixir
+RUN echo "source /opt/gigalixir/bin/load-profile" >> /root/.bashrc
 
 RUN python setup.py install
 WORKDIR /app
