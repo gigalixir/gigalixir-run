@@ -14,5 +14,5 @@ procfile-load-profile() {
         hash -r
 }
 
-HOME=/app procfile-load-profile /app
+procfile-load-profile /app
 

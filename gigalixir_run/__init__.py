@@ -56,14 +56,13 @@ def init(ctx, repo, cmd, app_key):
     if app_key == None:
         raise Exception("APP_KEY not found.")
 
-    # Upstart, systemd, etc do not run in docker containers, nor do I want them to. 
-    # We start the ssh server manually on init. This is not an ideal solution, but
-    # is a fine place to start. If the SSH server dies it won't respawn, but I think
-    # that is okay for now.
-    # SSH is needed for observer and remote_console.
-    # Cron is needed to update ssh keys>
-    subprocess.check_call(['service', 'ssh', 'start'])
-
+    # I wanted to put this at /app/.ssh since the root user's home dir is /app
+    # but it caused strange behavior. 
+    # ssh -t root@localhost -p 32924
+    # would work for the first few seconds and then stop working with
+    # permission denied (public key) or something
+    # it seemed to be a timing issue.. not sure what is going on so I just moved
+    # it back to /root/.ssh and all works fine.
     ssh_config = "/root/.ssh"
     if not os.path.exists(ssh_config):
         os.makedirs(ssh_config)
@@ -79,6 +78,14 @@ def init(ctx, repo, cmd, app_key):
     p.stdin.close()
 
     subprocess.check_call(['cron'])
+
+    # Upstart, systemd, etc do not run in docker containers, nor do I want them to. 
+    # We start the ssh server manually on init. This is not an ideal solution, but
+    # is a fine place to start. If the SSH server dies it won't respawn, but I think
+    # that is okay for now.
+    # SSH is needed for observer and remote_console.
+    # Cron is needed to update ssh keys>
+    subprocess.check_call(['service', 'ssh', 'start'])
 
     r = requests.get("%s/api/apps/%s/releases/current" % (ctx.obj['host'], repo), auth = (repo, app_key)) 
     if r.status_code != 200:
@@ -234,14 +241,6 @@ def launch(ctx, cmd, log_shuttle=True, use_procfile=False):
     os.environ['LIBCLUSTER_KUBERNETES_NODE_BASENAME'] = repo
     os.environ['LOGPLEX_TOKEN'] = logplex_token
 
-    # this looks especially dangerous to me. but it seems to be okay.
-    # we need it during init and remote_console so that .profile.d is sourced properly
-    # and iex, mix, erl can be found. the .profile.d scripts like to set the PATH to
-    # $HOME/... which needs to be /app and not /root.
-    # when SSHing in as root though, you need root's home folder to be /root because that
-    # is where the .ssh/authorized_keys are.
-    os.environ['HOME'] = "/app"
-
     # this is sort of dangerous. the current release
     # might have changed between here and when init
     # was called. that could cause some confusion..
@@ -274,7 +273,7 @@ def launch(ctx, cmd, log_shuttle=True, use_procfile=False):
         os.environ['GIGALIXIR_COMMAND'] = ' '.join(cmd)
         os.environ['PYTHONIOENCODING'] = 'utf-8'
 
-        # even though /root/.bashrc loads the profile, this
+        # even though /app/.bashrc loads the profile, this
         # still needs to be here for the init case. the init
         # case i.e. docker run ... gigalixir-run init does not
         # start bash so .bashrc is not sourced.
