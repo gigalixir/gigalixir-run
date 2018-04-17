@@ -6,3 +6,4 @@ gigalixir-run
 .cache
 .eggs
 dist/
+grun/

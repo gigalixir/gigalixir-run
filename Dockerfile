@@ -21,9 +21,10 @@ RUN mkdir -p /app
 RUN mkdir -p /opt/gigalixir
 RUN mkdir -p /release-config
 COPY etc/ssh/sshd_config /etc/ssh/sshd_config
+RUN mv /root/.bashrc /root/.bashrc.orig
+COPY bashrc /root/.bashrc
 ADD . /opt/gigalixir
 WORKDIR /opt/gigalixir
-RUN echo "source /opt/gigalixir/bin/load-profile" >> /root/.bashrc
 
 RUN python setup.py install
 WORKDIR /app
