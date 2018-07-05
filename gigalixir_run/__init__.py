@@ -210,6 +210,12 @@ def upgrade(ctx, version):
     launch(ctx, ('upgrade', mix_version))
 
 def launch(ctx, cmd, log_shuttle=True, use_procfile=False):
+    # TODO: find a way to be able to call launch here without having called init
+    # first. init sets kube-env-vars and then we use them here. a lot of these things
+    # we can probably fetch from the api server. 
+    # we need repo and app_key to access the api server, but the rest maybe is not needed
+    # pod ip we can get from the kubernetes downward api?
+
     # These vars are set by the pod spec and are present EXCEPT when you ssh in manually
     # as is the case when you run remote observer or want a remote_console. In those cases
     # we pull them from the file system instead. It's a bit of a hack. The init script
@@ -312,7 +318,7 @@ def launch(ctx, cmd, log_shuttle=True, use_procfile=False):
             if use_procfile:
                 # is this ever used?
                 # os.execv('/app/bin/%s' % app, ['foreman', 'start', '-d', '.', '--color', '--no-timestamp', '-f', procfile_path(os.getcwd())])
-                raise Exception("this should not happen 001")
+                raise Exception("001: This should not happen. Please contact help@gigalixir.com")
             else:
                 # kind of a hack here. if this is a distillery app, then we use the distillery boot script
                 # if it is a mix app, we run something like
@@ -330,7 +336,9 @@ def launch(ctx, cmd, log_shuttle=True, use_procfile=False):
                         iex_path = distutils.spawn.find_executable('iex')
                         os.execv(iex_path, [iex_path, '--name', 'remsh@%s' % ip, '--cookie', os.environ['MY_COOKIE'], '--remsh', os.environ['MY_NODE_NAME']])
                     else:
-                        raise Exception('You must use Distillery to run %s.' % ' '.join(list(cmd)))
+                        ps = subprocess.Popen(list(cmd))
+                        ps.wait()
+                        # raise Exception('You must use Distillery to run %s.' % ' '.join(list(cmd)))
 
 def is_exe(fpath):
     return os.path.isfile(fpath) and os.access(fpath, os.X_OK)
@@ -347,15 +355,18 @@ def load_profile(cwd):
     for f in glob.glob("%s/.profile.d/*.sh" % cwd):
         source(f)
 
-# from http://pythonwise.blogspot.com/2010/04/sourcing-shell-script.html
-def source(script, update=1):
-    pipe = subprocess.Popen(". %s; env" % script, stdout=subprocess.PIPE, shell=True)
-    data = pipe.communicate()[0]
+# from https://stackoverflow.com/a/7198338/365377
+def source(script):
+    source = 'source %s' % script
+    dump = '/usr/bin/python -c "import os, json;print json.dumps(dict(os.environ))"'
+    pipe = subprocess.Popen(['/bin/bash', '-c', '%s && %s' %(source,dump)], stdout=subprocess.PIPE)
+    env = json.loads(pipe.stdout.read())
 
-    env = dict((line.split("=", 1) for line in data.splitlines()))
-    if update:
-        os.environ.update(env)
+    # pipe = subprocess.Popen(". %s; env" % script, stdout=subprocess.PIPE, shell=True)
+    # data = pipe.communicate()[0]
+    # env = dict((line.split("=", 1) for line in data.splitlines()))
 
+    os.environ.update(env)
     return env
 
 def log(logplex_token, appname, hostname, line):
