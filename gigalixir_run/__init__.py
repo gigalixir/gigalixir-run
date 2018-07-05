@@ -20,6 +20,7 @@ urllib3.contrib.pyopenssl.inject_into_urllib3()
 # how is launch used?
 # 1. init bar foreground -> /app/bin/ggs foreground
 #                        -> foreman start
+# 1. init bar command Elixir.Task migrate
 # 2. job mix ecto.migrate -> mix ecto.migrate
 # 5. upgrade 0.0.2 -> /app/bin/ggs upgrade 0.0.2
 # 3. run command Elixir.Task migrate -> /app/bin/ggs command Elixir.Task migrate
@@ -37,6 +38,16 @@ urllib3.contrib.pyopenssl.inject_into_urllib3()
 # 2. distillery_job command Elixir.Task migrate -> mix ecto.migrate
 # leave upgrade as-is
 # leave init as-is
+#
+# command         log_shuttle use_procfile is_distillery done?
+# init(mix)       True        True         False         first pass
+# init(distillery)True        True         True 
+# run(mix)        False       False        False         first pass
+# run(distillery) False       False        True
+# job             True        False        False         first pass
+# upgrade         True        False        True
+# distillery_job  True        False        True
+# bootstrap       N/A         N/A          N/A, but True
 
 @click.group()
 @click.option('--env', envvar='GIGALIXIR_ENV', default='prod', help="GIGALIXIR environment [prod, dev].")
@@ -109,10 +120,23 @@ def init(ctx, repo, cmd, app_key):
     with open('%s/LOGPLEX_TOKEN' % kube_var_path, 'w') as f:
         f.write(os.environ[ 'LOGPLEX_TOKEN' ])
 
+    # no need to load_env_var because we know it is in the environ
+    logplex_token = os.environ['LOGPLEX_TOKEN']
+
     download_file(slug_url, "/app/%s.tar.gz" % customer_app_name)
     extract_file('/app', '%s.tar.gz' % customer_app_name)
     maybe_start_epmd()
-    launch(ctx, cmd, use_procfile=True)
+
+    def exec_fn(logplex_token, customer_app_name, repo, hostname):
+        log_start_and_stop_web(logplex_token, repo, hostname)
+        if is_distillery(customer_app_name):
+            ps = distillery_command(customer_app_name, cmd)
+        else:
+            ps = foreman_start(customer_app_name, cmd)
+        pipe_to_log_shuttle(ps, cmd, logplex_token, repo, hostname)
+        ps.wait()
+
+    launch(ctx, exec_fn, use_procfile=True)
 
 def extract_file(folder, filename):
     with cd(folder):
@@ -151,6 +175,7 @@ def distillery_job(ctx, cmd):
 def job(ctx, cmd):
     repo = load_env_var('REPO')
     app_key = load_env_var('APP_KEY')
+    logplex_token = load_env_var('LOGPLEX_TOKEN')
     release = current_release(ctx.obj['host'], repo, app_key)
     slug_url = release["slug_url"]
     customer_app_name = release["customer_app_name"]
@@ -161,23 +186,26 @@ def job(ctx, cmd):
     # wait, so use_procfile is true when in mix mode and init
     # but false when in mix mode, but running a job? gaaah.
     # TODO: enumerate all the ways launch is used and separate them
-    launch(ctx, cmd, log_shuttle=True)
+    def exec_fn(logplex_token, customer_app_name, repo, hostname):
+        log(logplex_token, repo, hostname, "Attempting to run '%s' in a new container." % (' '.join(cmd)))
+        ps = shell_command(cmd, logplex_token, repo, hostname)
+        pipe_to_log_shuttle(ps, cmd, logplex_token, repo, hostname)
+        ps.wait()
+
+    launch(ctx, exec_fn, log_shuttle=True)
 
 @cli.command()
 @click.argument('cmd', nargs=-1)
 @click.pass_context
 @report_errors
 def run(ctx, cmd):
-    launch(ctx, cmd, log_shuttle=False)
-
-@cli.command()
-@click.argument('cmd', nargs=-1)
-@click.pass_context
-@report_errors
-def test(ctx, cmd):
-    print ctx
-    print cmd
-
+    ip = load_env_var('MY_POD_IP')
+    def exec_fn(logplex_token, customer_app_name, repo, hostname):
+        if is_distillery(customer_app_name):
+            distillery_command_exec(customer_app_name, cmd)
+        else:
+            shell_command_exec(cmd, ip, logplex_token, repo, hostname)
+    launch(ctx, exec_fn, log_shuttle=False)
 
 def generate_vmargs(node_name, cookie):
     script_dir = os.path.dirname(__file__) #<-- absolute dir the script is in
@@ -200,11 +228,9 @@ def generate_vmargs(node_name, cookie):
 def bootstrap(ctx, customer_app_name, slug_url, cmd):
     # Similar to init except does not ask api.gigalixir.com for the current slug url or configs.
     # This also does not support SSH, observer, etc.
+    # Used mainly for debugging and manual emergency deploys
     download_file(slug_url, "/app/%s.tar.gz" % customer_app_name)
-    with cd("/app"):
-        tar = tarfile.open("%s.tar.gz" % customer_app_name, "r:gz")
-        tar.extractall()
-        tar.close()
+    extract_file("/app", "%s.tar.gz" % customer_app_name)
     with cd('/app'):
         os.execv('/app/bin/%s' % customer_app_name, ['/app/bin/%s' % customer_app_name] + list(cmd))
 
@@ -237,22 +263,8 @@ def upgrade(ctx, version):
 
     launch(ctx, ('upgrade', mix_version))
 
-
-def load_env_var(name):
-    if name in os.environ:
-        return os.environ[name]
-    else:
-        kube_var_path = "/kube-env-vars"
-        path = '%s/%s' % (kube_var_path, name)
-        if not os.path.exists(path):
-            raise Exception("could not find %s in env or in /kube-env-vars" % name)
-        else:
-            with open(path, 'r') as f:
-                value = f.read()
-            return value
-
 # keep this private so we can refactor. it needs it
-def launch(ctx, cmd, log_shuttle=True, use_procfile=False):
+def launch(ctx, exec_fn, log_shuttle=True, use_procfile=False):
     # TODO: launch really sucks. if you have an /app/bin/foo binary, then cmd is
     # an argument to that. if you don't then it's a shell command. that makes this
     # code confusing as nuts. especially with so many branches when log_shuttle=True/False
@@ -278,16 +290,6 @@ def launch(ctx, cmd, log_shuttle=True, use_procfile=False):
     # REPLACE_OS_VARS, MY_NODE_NAME, libcluster stuff.
     erlang_cookie = load_env_var('ERLANG_COOKIE')
 
-    os.environ['GIGALIXIR_DEFAULT_VMARGS'] = "true"
-    os.environ['REPLACE_OS_VARS'] = "true"
-    os.environ['RELX_REPLACE_OS_VARS'] = "true"
-    os.environ['MY_NODE_NAME'] = "%s@%s" % (repo, ip)
-    os.environ['MY_COOKIE'] = erlang_cookie
-    os.environ['LC_ALL'] = "en_US.UTF-8"
-    os.environ['LIBCLUSTER_KUBERNETES_SELECTOR'] = "repo=%s" % repo
-    os.environ['LIBCLUSTER_KUBERNETES_NODE_BASENAME'] = repo
-    os.environ['LOGPLEX_TOKEN'] = logplex_token
-
     # this is sort of dangerous. the current release
     # might have changed between here and when init
     # was called. that could cause some confusion..
@@ -297,11 +299,27 @@ def launch(ctx, cmd, log_shuttle=True, use_procfile=False):
     config = release["config"]
     customer_app_name = release["customer_app_name"]
 
+    os.environ['GIGALIXIR_DEFAULT_VMARGS'] = "true"
+    os.environ['MY_NODE_NAME'] = "%s@%s" % (repo, ip)
+    os.environ['MY_COOKIE'] = erlang_cookie
+    os.environ['LC_ALL'] = "en_US.UTF-8"
+
+    # TODO: if is_distillery(customer_app_name):
+    os.environ['REPLACE_OS_VARS'] = "true"
+    os.environ['RELX_REPLACE_OS_VARS'] = "true"
+    os.environ['LIBCLUSTER_KUBERNETES_SELECTOR'] = "repo=%s" % repo
+    os.environ['LIBCLUSTER_KUBERNETES_NODE_BASENAME'] = repo
+
+    # TODO: unused?
+    os.environ['LOGPLEX_TOKEN'] = logplex_token
+
     for key, value in config.iteritems():
         os.environ[key] = value
-    port = os.environ.get('PORT')
 
-    if os.environ[ 'GIGALIXIR_DEFAULT_VMARGS' ].lower() == "true":
+    hostname = get_hostname()
+
+    # TODO: if is_distillery(customer_app_name):
+    if os.environ['GIGALIXIR_DEFAULT_VMARGS'].lower() == "true":
         # bypass all the distillery vm.args stuff and use our own
         # we manually set VMARGS_PATH to say to distillery, use this one
         # not any of the million other possible vm.args
@@ -314,46 +332,85 @@ def launch(ctx, cmd, log_shuttle=True, use_procfile=False):
         os.environ['VMARGS_PATH'] = "/release-config/vm.args"
 
     with cd('/app'):
-        # named GIGALIXIR_APP_NAME because it is an env var that gigalixir creates
-        # and uses as opposed to a customer provided one. we prefix with GIGALIXIR_
-        # to namespace it so they can still set vars called "APP_NAME".. although
-        # they can't really?
-        os.environ['GIGALIXIR_APP_NAME'] = customer_app_name
-        os.environ['GIGALIXIR_COMMAND'] = ' '.join(cmd)
-        os.environ['PYTHONIOENCODING'] = 'utf-8'
-
         # even though /app/.bashrc loads the profile, this
         # still needs to be here for the init case. the init
         # case i.e. docker run ... gigalixir-run init does not
         # start bash so .bashrc is not sourced.
         # ssh into this container runs .bashrc so the user
         # has access to mix and stuff
+        # move this into the functions that need it
+        # e.g. init, job, distillery_job
+        # not upgrade, run, bootstrap
         load_profile(os.getcwd())
+        exec_fn(logplex_token, customer_app_name, repo, hostname)
 
+
+def log_start_and_stop_web(logplex_token, appname, hostname):
+    # send some info through the log shuttle really quick to inform the customer
+    # that their app is attempting to start.
+    # port is None when running remote_console or something like that.
+    port = os.environ.get('PORT')
+    log(logplex_token, appname, hostname, "Attempting to start '%s' on host '%s'\nAttempting health checks on port %s\n" % (appname, hostname, port))
+
+    # log when shutting down.
+    def handle_sigterm(signum, frame):
+        log(logplex_token, appname, hostname, "Shutting down '%s' on host '%s'\n" % (appname, hostname))
+        sys.exit(0)
+    signal.signal(signal.SIGTERM, handle_sigterm)
+
+def pipe_to_log_shuttle(ps, cmd, logplex_token, appname, hostname):
+    procid = ' '.join(cmd)
+    log_shuttle_cmd = "/opt/gigalixir/bin/log-shuttle -logs-url=http://token:%s@post.logs.gigalixir.com/logs -appname %s -hostname %s -procid %s -num-outlets 1 -batch-size=5 -back-buff=5000" % (logplex_token, appname, hostname, hostname)
+    return subprocess.check_call(log_shuttle_cmd.split(), stdin=ps.stdout)
+
+
+def foreman_start(customer_app_name, cmd):
+    # named GIGALIXIR_APP_NAME because it is an env var that gigalixir creates
+    # and uses as opposed to a customer provided one. we prefix with GIGALIXIR_
+    # to namespace it so they can still set vars called "APP_NAME".. although
+    # they can't really? used in Procfile
+    os.environ['GIGALIXIR_APP_NAME'] = customer_app_name
+    os.environ['GIGALIXIR_COMMAND'] = ' '.join(cmd)
+    os.environ['PYTHONIOENCODING'] = 'utf-8'
+
+    # when you use -f, foreman changes the current working dir
+    # to the folder the Procfile is in. We set `-d .` to keep
+    # it the current dir.
+    return subprocess.Popen(['foreman', 'start', '-d', '.', '--color', '--no-timestamp', '-f', procfile_path(os.getcwd())], stdout=subprocess.PIPE)
+
+def distillery_command(customer_app_name, cmd):
+    return subprocess.Popen([app_path] + list(cmd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+
+def distillery_command_exec(customer_app_name, cmd):
+    app_path = '/app/bin/%s' % customer_app_name
+    # no need to return, this replaces the process
+    os.execv(app_path, [app_path] + list(cmd))
+
+def shell_command(cmd, logplex_token, appname, hostname):
+    try:
+        return subprocess.Popen(list(cmd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    except Exception as e:
+        log(logplex_token, appname, hostname, str(e))
+        raise
+
+def shell_command_exec(cmd, ip, logplex_token, appname, hostname):
+    if list(cmd) == ['remote_console']:
+        # iex_path = distutils.spawn.find_executable('iex')
+        os.execvp('iex', ['iex', '--name', 'remsh@%s' % ip, '--cookie', os.environ['MY_COOKIE'], '--remsh', os.environ['MY_NODE_NAME']])
+    else:
+        cmd = list(cmd)
+        os.execvp(cmd[0], cmd)
+
+def delete_me_soon():
         if log_shuttle == True:
             # appname used in logplex messages
             appname = repo
-            hostname = subprocess.check_output(["hostname"]).strip()
+            hostname = get_hostname()
 
-            # send some info through the log shuttle really quick to inform the customer
-            # that their app is attempting to start.
-            # port is None when running remote_console or something like that.
-            if port != None:
-                log(logplex_token, appname, hostname, "Attempting to start '%s' on host '%s'\nAttempting health checks on port %s\n" % (appname, hostname, port))
+            log_start_and_stop_web(repo, logplex_token, appname, hostname)
 
-                # log when shutting down.
-                def handle_sigterm(signum, frame):
-                    log(logplex_token, appname, hostname, "Shutting down '%s' on host '%s'\n" % (appname, hostname))
-                    sys.exit(0)
-                signal.signal(signal.SIGTERM, handle_sigterm)
-
-            procid = ' '.join(cmd)
-            log_shuttle_cmd = "/opt/gigalixir/bin/log-shuttle -logs-url=http://token:%s@post.logs.gigalixir.com/logs -appname %s -hostname %s -procid %s -num-outlets 1 -batch-size=5 -back-buff=5000" % (logplex_token, appname, hostname, hostname)
             if use_procfile:
-                # when you use -f, foreman changes the current working dir
-                # to the folder the Procfile is in. We set `-d .` to keep
-                # it the current dir.
-                ps = subprocess.Popen(['foreman', 'start', '-d', '.', '--color', '--no-timestamp', '-f', procfile_path(os.getcwd())], stdout=subprocess.PIPE)
+                ps = foreman_start(customer_app_name, cmd)
             else:
                 # kind of a hack here. if this is a distillery app, then we use the distillery boot script
                 # if it is a mix app, we run something like
@@ -369,16 +426,11 @@ def launch(ctx, cmd, log_shuttle=True, use_procfile=False):
                     # no way to run shell commands if using distillery?
                     # this feels like a mess. split out different functions for
                     # shell command vs distillery app command
-                    ps = subprocess.Popen([app_path] + list(cmd), stdout=subprocess.PIPE)
+                    ps = distillery_command(customer_app_name, cmd)
                 else:
                     # just run it as a shell command
-                    log(logplex_token, appname, hostname, "Attempting to run '%s' in a new container." % (' '.join(cmd)))
-                    try:
-                        ps = subprocess.Popen(list(cmd), stdout=subprocess.PIPE)
-                    except Exception as e:
-                        log(logplex_token, appname, hostname, str(e))
-                        raise
-            subprocess.check_call(log_shuttle_cmd.split(), stdin=ps.stdout)
+                    ps = shell_command(cmd, logplex_token, appname, hostname)
+            pipe_to_log_shuttle(ps, cmd, logplex_token, appname, hostname)
             ps.wait()
         else:
             if use_procfile:
@@ -396,15 +448,9 @@ def launch(ctx, cmd, log_shuttle=True, use_procfile=False):
                 # TODO: distillery?
                 app_path = '/app/bin/%s' % customer_app_name
                 if is_exe(app_path):
-                    os.execv(app_path, [app_path] + list(cmd))
+                    distillery_command_exec(customer_app_name, cmd)
                 else:
-                    if list(cmd) == ['remote_console']:
-                        iex_path = distutils.spawn.find_executable('iex')
-                        os.execv(iex_path, [iex_path, '--name', 'remsh@%s' % ip, '--cookie', os.environ[ 'MY_COOKIE' ], '--remsh', os.environ[ 'MY_NODE_NAME' ]])
-                    else:
-                        ps = subprocess.Popen(list(cmd))
-                        ps.wait()
-                        # raise Exception('You must use Distillery to run %s.' % ' '.join(list(cmd)))
+                    shell_command_exec(cmd, logplex_token, appname, hostname)
 
 def is_exe(fpath):
     return os.path.isfile(fpath) and os.access(fpath, os.X_OK)
@@ -514,6 +560,25 @@ def current_release(host, repo, app_key):
     if r.status_code != 200:
         raise Exception(r)
     return r.json()["data"]
+
+@Memoize
+def get_hostname():
+    return subprocess.check_output(["hostname"]).strip()
+
+@Memoize
+def load_env_var(name):
+    if name in os.environ:
+        return os.environ[name]
+    else:
+        kube_var_path = "/kube-env-vars"
+        path = '%s/%s' % (kube_var_path, name)
+        if not os.path.exists(path):
+            raise Exception("could not find %s in env or in /kube-env-vars" % name)
+        else:
+            with open(path, 'r') as f:
+                value = f.read()
+            return value
+
 
 def is_distillery(customer_app_name):
     app_path = '/app/bin/%s' % customer_app_name
