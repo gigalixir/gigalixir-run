@@ -17,6 +17,27 @@ import pystache
 import distutils.spawn
 urllib3.contrib.pyopenssl.inject_into_urllib3()
 
+# how is launch used?
+# 1. init bar foreground -> /app/bin/ggs foreground
+#                        -> foreman start
+# 2. job mix ecto.migrate -> mix ecto.migrate
+# 5. upgrade 0.0.2 -> /app/bin/ggs upgrade 0.0.2
+# 3. run command Elixir.Task migrate -> /app/bin/ggs command Elixir.Task migrate
+# 4. run eval 'Ecto.Migrator.up' -> /app/bin/ggs eval '1+1'
+# 6. run remote_console -> /app/bin/ggs remote_console
+#                       -> iex --remsh
+#
+# looks like run is for ssh in and running a command
+# job is for creating a new container and running a command
+# upgrade sshes in, but downloads a new slug and all that before running a command
+
+# changing it to?
+# strategy? pass into launch a class/function to run for run
+# 2. job mix ecto.migrate -> mix ecto.migrate
+# 2. distillery_job command Elixir.Task migrate -> mix ecto.migrate
+# leave upgrade as-is
+# leave init as-is
+
 @click.group()
 @click.option('--env', envvar='GIGALIXIR_ENV', default='prod', help="GIGALIXIR environment [prod, dev].")
 @click.pass_context
@@ -56,41 +77,9 @@ def init(ctx, repo, cmd, app_key):
     if app_key == None:
         raise Exception("APP_KEY not found.")
 
-    # I wanted to put this at /app/.ssh since the root user's home dir is /app
-    # but it caused strange behavior. 
-    # ssh -t root@localhost -p 32924
-    # would work for the first few seconds and then stop working with
-    # permission denied (public key) or something
-    # it seemed to be a timing issue.. not sure what is going on so I just moved
-    # it back to /root/.ssh and all works fine.
-    ssh_config = "/root/.ssh"
-    if not os.path.exists(ssh_config):
-        os.makedirs(ssh_config)
+    start_ssh(repo, app_key)
 
-    # I can't bake this into the image because the env vars are not available at build time. We set it up here
-    # at container startup.
-    update_authorized_keys_cmd = "curl https://api.gigalixir.com/api/apps/%s/ssh_keys -u %s:%s | jq -r '.data | .[]' > /root/.ssh/authorized_keys" % (repo, repo, app_key)
-
-    subprocess.check_call(['/bin/bash', '-c', update_authorized_keys_cmd])
-
-    p = subprocess.Popen(['crontab'], stdin=subprocess.PIPE)
-    p.communicate("* * * * * %s && echo $(date) >> /var/log/cron.log\n" % update_authorized_keys_cmd)
-    p.stdin.close()
-
-    subprocess.check_call(['cron'])
-
-    # Upstart, systemd, etc do not run in docker containers, nor do I want them to. 
-    # We start the ssh server manually on init. This is not an ideal solution, but
-    # is a fine place to start. If the SSH server dies it won't respawn, but I think
-    # that is okay for now.
-    # SSH is needed for observer and remote_console.
-    # Cron is needed to update ssh keys>
-    subprocess.check_call(['service', 'ssh', 'start'])
-
-    r = requests.get("%s/api/apps/%s/releases/current" % (ctx.obj['host'], repo), auth = (repo, app_key)) 
-    if r.status_code != 200:
-        raise Exception(r)
-    release = r.json()["data"]
+    release = current_release(ctx.obj['host'], repo, app_key)
     slug_url = release["slug_url"]
     config = release["config"]
     customer_app_name = release["customer_app_name"]
@@ -121,22 +110,57 @@ def init(ctx, repo, cmd, app_key):
         f.write(os.environ[ 'LOGPLEX_TOKEN' ])
 
     download_file(slug_url, "/app/%s.tar.gz" % customer_app_name)
+    extract_file('/app', '%s.tar.gz' % customer_app_name)
+    maybe_start_epmd()
+    launch(ctx, cmd, use_procfile=True)
 
-    with cd("/app"):
-        tar = tarfile.open("%s.tar.gz" % customer_app_name, "r:gz")
+def extract_file(folder, filename):
+    with cd(folder):
+        tar = tarfile.open(filename, "r:gz")
         tar.extractall()
         tar.close()
 
+def maybe_start_epmd():
     epmd_path = find('epmd', '/app')
     if epmd_path:
         os.symlink(epmd_path, '/usr/local/bin/epmd')
-    launch(ctx, cmd, use_procfile=True)
+
+@cli.command()
+@click.argument('cmd', nargs=-1)
+@click.pass_context
+@report_errors
+def distillery_job(ctx, cmd):
+    repo = load_env_var('REPO')
+    app_key = load_env_var('APP_KEY')
+    release = current_release(ctx.obj['host'], repo, app_key)
+    slug_url = release["slug_url"]
+    customer_app_name = release["customer_app_name"]
+
+    download_file(slug_url, "/app/%s.tar.gz" % customer_app_name)
+    extract_file('/app', '%s.tar.gz' % customer_app_name)
+
+    # wait, so use_procfile is true when in mix mode and init
+    # but false when in mix mode, but running a job? gaaah.
+    # TODO: enumerate all the ways launch is used and separate them
+    launch(ctx, cmd, log_shuttle=True)
 
 @cli.command()
 @click.argument('cmd', nargs=-1)
 @click.pass_context
 @report_errors
 def job(ctx, cmd):
+    repo = load_env_var('REPO')
+    app_key = load_env_var('APP_KEY')
+    release = current_release(ctx.obj['host'], repo, app_key)
+    slug_url = release["slug_url"]
+    customer_app_name = release["customer_app_name"]
+
+    download_file(slug_url, "/app/%s.tar.gz" % customer_app_name)
+    extract_file('/app', '%s.tar.gz' % customer_app_name)
+
+    # wait, so use_procfile is true when in mix mode and init
+    # but false when in mix mode, but running a job? gaaah.
+    # TODO: enumerate all the ways launch is used and separate them
     launch(ctx, cmd, log_shuttle=True)
 
 @cli.command()
@@ -189,25 +213,17 @@ def bootstrap(ctx, customer_app_name, slug_url, cmd):
 @click.pass_context
 @report_errors
 def upgrade(ctx, version):
-    kube_var_path = "/kube-env-vars"
-    with open('%s/APP' % kube_var_path, 'r') as f:
-        app = f.read()
-    with open('%s/REPO' % kube_var_path, 'r') as f:
-        repo = f.read()
-    with open('%s/APP_KEY' % kube_var_path, 'r') as f:
-        app_key = f.read()
-
-    r = requests.get("%s/api/apps/%s/releases/current" % (ctx.obj['host'], repo), auth = (repo, app_key)) 
-    if r.status_code != 200:
-        raise Exception(r)
-    release = r.json()["data"]
+    app = load_env_var('APP')
+    repo = load_env_var('REPO')
+    app_key = load_env_var('APP_KEY')
+    release = current_release(ctx.obj['host'], repo, app_key)
     slug_url = release["slug_url"]
+    config = release["config"]
 
     # get mix version from slug url. 
     # TODO: make this explicit in the database.
     # https://storage.googleapis.com/slug-bucket/production/sunny-wellgroomed-africanpiedkingfisher/releases/0.0.2/SHA/gigalixir_getting_started.tar.gz
     mix_version = urlparse.urlparse(slug_url).path.split('/')[5]
-    config = release["config"]
 
     release_dir = "/app/releases/%s" % mix_version
     if not os.path.exists(release_dir):
@@ -217,13 +233,25 @@ def upgrade(ctx, version):
         os.environ[key] = value
 
     download_file(slug_url, "/app/releases/%s/%s.tar.gz" % (mix_version, app))
-    with cd("/app/releases/%s" % mix_version):
-        tar = tarfile.open("%s.tar.gz" % app, "r:gz")
-        tar.extractall()
-        tar.close()
+    extract_file("/app/releases/%s" % mix_version, '%s.tar.gz' % customer_app_name)
 
     launch(ctx, ('upgrade', mix_version))
 
+
+def load_env_var(name):
+    if name in os.environ:
+        return os.environ[name]
+    else:
+        kube_var_path = "/kube-env-vars"
+        path = '%s/%s' % (kube_var_path, name)
+        if not os.path.exists(path):
+            raise Exception("could not find %s in env or in /kube-env-vars" % name)
+        else:
+            with open(path, 'r') as f:
+                value = f.read()
+            return value
+
+# keep this private so we can refactor. it needs it
 def launch(ctx, cmd, log_shuttle=True, use_procfile=False):
     # TODO: launch really sucks. if you have an /app/bin/foo binary, then cmd is
     # an argument to that. if you don't then it's a shell command. that makes this
@@ -240,43 +268,34 @@ def launch(ctx, cmd, log_shuttle=True, use_procfile=False):
     # as is the case when you run remote observer or want a remote_console. In those cases
     # we pull them from the file system instead. It's a bit of a hack. The init script
     # creates those files.
-    kube_var_path = "/kube-env-vars"
-    with open('%s/MY_POD_IP' % kube_var_path, 'r') as f:
-        ip = f.read()
+    ip = load_env_var('MY_POD_IP')
+    repo = load_env_var('REPO')
+    app_key = load_env_var('APP_KEY')
+    logplex_token = load_env_var('LOGPLEX_TOKEN')
 
     # TODO: now that we are no longer elixir-only, some of these things should be moved so
     # that they are only done for elixir apps. For example, ERLANG_COOKIE, vm.args stuff
     # REPLACE_OS_VARS, MY_NODE_NAME, libcluster stuff.
-    with open('%s/ERLANG_COOKIE' % kube_var_path, 'r') as f:
-        erlang_cookie = f.read()
-    with open('%s/REPO' % kube_var_path, 'r') as f:
-        repo = f.read()
-    with open('%s/APP_KEY' % kube_var_path, 'r') as f:
-        app_key = f.read()
-    with open('%s/APP' % kube_var_path, 'r') as f:
-        app = f.read()
-    with open('%s/LOGPLEX_TOKEN' % kube_var_path, 'r') as f:
-        logplex_token = f.read()
-    os.environ[ 'GIGALIXIR_DEFAULT_VMARGS'] = "true"
-    os.environ[ 'REPLACE_OS_VARS'] = "true"
-    os.environ[ 'RELX_REPLACE_OS_VARS'] = "true"
-    os.environ[ 'MY_NODE_NAME'] = "%s@%s" % (repo, ip)
-    os.environ[ 'MY_COOKIE'] = erlang_cookie
-    os.environ[ 'LC_ALL'] = "en_US.UTF-8"
-    os.environ[ 'LIBCLUSTER_KUBERNETES_SELECTOR'] = "repo=%s" % repo
-    os.environ[ 'LIBCLUSTER_KUBERNETES_NODE_BASENAME'] = repo
-    os.environ[ 'LOGPLEX_TOKEN'] = logplex_token
+    erlang_cookie = load_env_var('ERLANG_COOKIE')
+
+    os.environ['GIGALIXIR_DEFAULT_VMARGS'] = "true"
+    os.environ['REPLACE_OS_VARS'] = "true"
+    os.environ['RELX_REPLACE_OS_VARS'] = "true"
+    os.environ['MY_NODE_NAME'] = "%s@%s" % (repo, ip)
+    os.environ['MY_COOKIE'] = erlang_cookie
+    os.environ['LC_ALL'] = "en_US.UTF-8"
+    os.environ['LIBCLUSTER_KUBERNETES_SELECTOR'] = "repo=%s" % repo
+    os.environ['LIBCLUSTER_KUBERNETES_NODE_BASENAME'] = repo
+    os.environ['LOGPLEX_TOKEN'] = logplex_token
 
     # this is sort of dangerous. the current release
     # might have changed between here and when init
     # was called. that could cause some confusion..
     # TODO: fetch the right release version from disk.
     # TODO: upgrade should update the release version.
-    r = requests.get("%s/api/apps/%s/releases/current" % (ctx.obj['host'], repo), auth = (repo, app_key)) 
-    if r.status_code != 200:
-        raise Exception(r)
-    release = r.json()["data"]
+    release = current_release(ctx.obj['host'], repo, app_key)
     config = release["config"]
+    customer_app_name = release["customer_app_name"]
 
     for key, value in config.iteritems():
         os.environ[key] = value
@@ -295,7 +314,11 @@ def launch(ctx, cmd, log_shuttle=True, use_procfile=False):
         os.environ['VMARGS_PATH'] = "/release-config/vm.args"
 
     with cd('/app'):
-        os.environ['GIGALIXIR_APP_NAME'] = app
+        # named GIGALIXIR_APP_NAME because it is an env var that gigalixir creates
+        # and uses as opposed to a customer provided one. we prefix with GIGALIXIR_
+        # to namespace it so they can still set vars called "APP_NAME".. although
+        # they can't really?
+        os.environ['GIGALIXIR_APP_NAME'] = customer_app_name
         os.environ['GIGALIXIR_COMMAND'] = ' '.join(cmd)
         os.environ['PYTHONIOENCODING'] = 'utf-8'
 
@@ -308,6 +331,7 @@ def launch(ctx, cmd, log_shuttle=True, use_procfile=False):
         load_profile(os.getcwd())
 
         if log_shuttle == True:
+            # appname used in logplex messages
             appname = repo
             hostname = subprocess.check_output(["hostname"]).strip()
 
@@ -339,7 +363,7 @@ def launch(ctx, cmd, log_shuttle=True, use_procfile=False):
                 # TODO: run?
                 # TODO: migrate?
                 # TODO: distillery?
-                app_path = '/app/bin/%s' % app
+                app_path = '/app/bin/%s' % customer_app_name
                 if is_exe(app_path):
                     # run it as a command to the app binary if it exists
                     # no way to run shell commands if using distillery?
@@ -348,7 +372,12 @@ def launch(ctx, cmd, log_shuttle=True, use_procfile=False):
                     ps = subprocess.Popen([app_path] + list(cmd), stdout=subprocess.PIPE)
                 else:
                     # just run it as a shell command
-                    ps = subprocess.Popen(list(cmd), stdout=subprocess.PIPE)
+                    log(logplex_token, appname, hostname, "Attempting to run '%s' in a new container." % (' '.join(cmd)))
+                    try:
+                        ps = subprocess.Popen(list(cmd), stdout=subprocess.PIPE)
+                    except Exception as e:
+                        log(logplex_token, appname, hostname, str(e))
+                        raise
             subprocess.check_call(log_shuttle_cmd.split(), stdin=ps.stdout)
             ps.wait()
         else:
@@ -365,7 +394,7 @@ def launch(ctx, cmd, log_shuttle=True, use_procfile=False):
                 # TODO: run?
                 # TODO: migrate?
                 # TODO: distillery?
-                app_path = '/app/bin/%s' % app
+                app_path = '/app/bin/%s' % customer_app_name
                 if is_exe(app_path):
                     os.execv(app_path, [app_path] + list(cmd))
                 else:
@@ -398,11 +427,6 @@ def source(script):
     dump = '/usr/bin/python -c "import os, json;print json.dumps(dict(os.environ))"'
     pipe = subprocess.Popen(['/bin/bash', '-c', '%s && %s' %(source,dump)], stdout=subprocess.PIPE)
     env = json.loads(pipe.stdout.read())
-
-    # pipe = subprocess.Popen(". %s; env" % script, stdout=subprocess.PIPE, shell=True)
-    # data = pipe.communicate()[0]
-    # env = dict((line.split("=", 1) for line in data.splitlines()))
-
     os.environ.update(env)
     return env
 
@@ -439,3 +463,58 @@ def find(name, path):
     for root, dirs, files in os.walk(path):
         if name in files:
             return os.path.join(root, name)
+
+def start_ssh(repo, app_key):
+    # I wanted to put this at /app/.ssh since the root user's home dir is /app
+    # but it caused strange behavior. 
+    # ssh -t root@localhost -p 32924
+    # would work for the first few seconds and then stop working with
+    # permission denied (public key) or something
+    # it seemed to be a timing issue.. not sure what is going on so I just moved
+    # it back to /root/.ssh and all works fine.
+    ssh_config = "/root/.ssh"
+    if not os.path.exists(ssh_config):
+        os.makedirs(ssh_config)
+
+    # I can't bake this into the image because the env vars are not available at build time. We set it up here
+    # at container startup.
+    update_authorized_keys_cmd = "curl https://api.gigalixir.com/api/apps/%s/ssh_keys -u %s:%s | jq -r '.data | .[]' > /root/.ssh/authorized_keys" % (repo, repo, app_key)
+
+    subprocess.check_call(['/bin/bash', '-c', update_authorized_keys_cmd])
+
+    p = subprocess.Popen(['crontab'], stdin=subprocess.PIPE)
+    p.communicate("* * * * * %s && echo $(date) >> /var/log/cron.log\n" % update_authorized_keys_cmd)
+    p.stdin.close()
+
+    subprocess.check_call(['cron'])
+
+    # Upstart, systemd, etc do not run in docker containers, nor do I want them to. 
+    # We start the ssh server manually on init. This is not an ideal solution, but
+    # is a fine place to start. If the SSH server dies it won't respawn, but I think
+    # that is okay for now.
+    # SSH is needed for observer and remote_console.
+    # Cron is needed to update ssh keys>
+    subprocess.check_call(['service', 'ssh', 'start'])
+
+# from: https://stackoverflow.com/questions/1988804/what-is-memoization-and-how-can-i-use-it-in-python
+class Memoize:
+    def __init__(self, f):
+        self.f = f
+        self.memo = {}
+    def __call__(self, *args):
+        if not args in self.memo:
+            self.memo[args] = self.f(*args)
+        # Warning: You may wish to do a deepcopy here if returning objects
+        return self.memo[args]
+
+# memozied so 1. it is the same everytime for a given process and 2. more efficient
+@Memoize
+def current_release(host, repo, app_key):
+    r = requests.get("%s/api/apps/%s/releases/current" % (host, repo), auth = (repo, app_key)) 
+    if r.status_code != 200:
+        raise Exception(r)
+    return r.json()["data"]
+
+def is_distillery(customer_app_name):
+    app_path = '/app/bin/%s' % customer_app_name
+    return is_exe(app_path)
