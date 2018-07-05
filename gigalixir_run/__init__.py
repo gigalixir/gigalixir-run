@@ -136,8 +136,23 @@ def init(ctx, repo, cmd, app_key):
 @click.argument('cmd', nargs=-1)
 @click.pass_context
 @report_errors
+def job(ctx, cmd):
+    launch(ctx, cmd, log_shuttle=True)
+
+@cli.command()
+@click.argument('cmd', nargs=-1)
+@click.pass_context
+@report_errors
 def run(ctx, cmd):
     launch(ctx, cmd, log_shuttle=False)
+
+@cli.command()
+@click.argument('cmd', nargs=-1)
+@click.pass_context
+@report_errors
+def test(ctx, cmd):
+    print ctx
+    print cmd
 
 
 def generate_vmargs(node_name, cookie):
@@ -210,6 +225,11 @@ def upgrade(ctx, version):
     launch(ctx, ('upgrade', mix_version))
 
 def launch(ctx, cmd, log_shuttle=True, use_procfile=False):
+    # TODO: launch really sucks. if you have an /app/bin/foo binary, then cmd is
+    # an argument to that. if you don't then it's a shell command. that makes this
+    # code confusing as nuts. especially with so many branches when log_shuttle=True/False
+    # and use_procfile=True/False. what is what is what?!
+
     # TODO: find a way to be able to call launch here without having called init
     # first. init sets kube-env-vars and then we use them here. a lot of these things
     # we can probably fetch from the api server. 
@@ -311,7 +331,24 @@ def launch(ctx, cmd, log_shuttle=True, use_procfile=False):
                 # it the current dir.
                 ps = subprocess.Popen(['foreman', 'start', '-d', '.', '--color', '--no-timestamp', '-f', procfile_path(os.getcwd())], stdout=subprocess.PIPE)
             else:
-                ps = subprocess.Popen(['/app/bin/%s' % app] + list(cmd), stdout=subprocess.PIPE)
+                # kind of a hack here. if this is a distillery app, then we use the distillery boot script
+                # if it is a mix app, we run something like
+                # iex --name remsh@127.0.0.1 --cookie bar --remsh foo@127.0.0.1
+                # TODO: observer?
+                # TODO: upgrades?
+                # TODO: run?
+                # TODO: migrate?
+                # TODO: distillery?
+                app_path = '/app/bin/%s' % app
+                if is_exe(app_path):
+                    # run it as a command to the app binary if it exists
+                    # no way to run shell commands if using distillery?
+                    # this feels like a mess. split out different functions for
+                    # shell command vs distillery app command
+                    ps = subprocess.Popen([app_path] + list(cmd), stdout=subprocess.PIPE)
+                else:
+                    # just run it as a shell command
+                    ps = subprocess.Popen(list(cmd), stdout=subprocess.PIPE)
             subprocess.check_call(log_shuttle_cmd.split(), stdin=ps.stdout)
             ps.wait()
         else:
