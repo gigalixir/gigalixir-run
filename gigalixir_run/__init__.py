@@ -82,9 +82,12 @@ def report_errors(f):
 @click.argument('repo', nargs=1)
 @click.argument('cmd', nargs=-1)
 @click.option('--app_key', envvar='APP_KEY', default=None)
+@click.option('--logplex_token', envvar='LOGPLEX_TOKEN', default=None)
+@click.option('--erlang_cookie', envvar='ERLANG_COOKIE', default=None)
+@click.option('--ip', envvar='MY_POD_IP', default=None)
 @click.pass_context
 @report_errors
-def init(ctx, repo, cmd, app_key):
+def init(ctx, repo, cmd, app_key, logplex_token, erlang_cookie, ip):
     if app_key == None:
         raise Exception("APP_KEY not found.")
 
@@ -92,15 +95,8 @@ def init(ctx, repo, cmd, app_key):
 
     release = current_release(ctx.obj['host'], repo, app_key)
     slug_url = release["slug_url"]
-    config = release["config"]
     customer_app_name = release["customer_app_name"]
 
-    for key, value in config.iteritems():
-        os.environ[key] = value
-
-    logplex_token = os.environ['LOGPLEX_TOKEN']
-    erlang_cookie = os.environ['ERLANG_COOKIE']
-    ip = os.environ['MY_POD_IP']
     persist_env(repo, customer_app_name, app_key, logplex_token, erlang_cookie, ip)
 
     download_file(slug_url, "/app/%s.tar.gz" % customer_app_name)
@@ -109,14 +105,16 @@ def init(ctx, repo, cmd, app_key):
 
     def exec_fn(logplex_token, customer_app_name, repo, hostname):
         log_start_and_stop_web(logplex_token, repo, hostname)
+        load_profile()
         if is_distillery(customer_app_name):
+            maybe_use_default_vm_args()
             ps = distillery_command(customer_app_name, cmd)
         else:
             ps = foreman_start(customer_app_name, cmd)
         pipe_to_log_shuttle(ps, cmd, logplex_token, repo, hostname)
         ps.wait()
 
-    launch(ctx, exec_fn, use_procfile=True)
+    launch(ctx, exec_fn, repo, app_key)
 
 def persist_env(repo, customer_app_name, app_key, logplex_token, erlang_cookie, ip):
     # HACK ALERT 
@@ -168,11 +166,13 @@ def distillery_job(ctx, cmd):
 
     def exec_fn(logplex_token, customer_app_name, repo, hostname):
         log(logplex_token, repo, hostname, "Attempting to run 'bin/%s %s' in a new container." % (customer_app_name, ' '.join(cmd)))
+        load_profile()
+        maybe_use_default_vm_args()
         ps = distillery_command(customer_app_name, cmd)
         pipe_to_log_shuttle(ps, cmd, logplex_token, repo, hostname)
         ps.wait()
 
-    launch(ctx, exec_fn, log_shuttle=True)
+    launch(ctx, exec_fn, repo, app_key)
 
 @cli.command()
 @click.argument('cmd', nargs=-1)
@@ -190,24 +190,28 @@ def job(ctx, cmd):
 
     def exec_fn(logplex_token, customer_app_name, repo, hostname):
         log(logplex_token, repo, hostname, "Attempting to run '%s' in a new container." % (' '.join(cmd)))
+        load_profile()
         ps = shell_command(cmd, logplex_token, repo, hostname)
         pipe_to_log_shuttle(ps, cmd, logplex_token, repo, hostname)
         ps.wait()
 
-    launch(ctx, exec_fn, log_shuttle=True)
+    launch(ctx, exec_fn, repo, app_key)
 
 @cli.command()
 @click.argument('cmd', nargs=-1)
 @click.pass_context
 @report_errors
 def run(ctx, cmd):
+    repo = load_env_var('REPO')
+    app_key = load_env_var('APP_KEY')
     ip = load_env_var('MY_POD_IP')
     def exec_fn(logplex_token, customer_app_name, repo, hostname):
         if is_distillery(customer_app_name):
+            maybe_use_default_vm_args()
             distillery_command_exec(customer_app_name, cmd)
         else:
             shell_command_exec(cmd, ip, logplex_token, repo, hostname)
-    launch(ctx, exec_fn, log_shuttle=False)
+    launch(ctx, exec_fn, repo, app_key)
 
 def generate_vmargs(node_name, cookie):
     script_dir = os.path.dirname(__file__) #<-- absolute dir the script is in
@@ -267,68 +271,66 @@ def upgrade(ctx, version):
     def exec_fn(logplex_token, customer_app_name, repo, hostname):
         log(logplex_token, repo, hostname, "Attempting to upgrade '%s' on host '%s'\n" % (repo, hostname))
         cmd = ('upgrade', mix_version)
+        maybe_use_default_vm_args()
         ps = distillery_command(customer_app_name, cmd)
         pipe_to_log_shuttle(ps, cmd, logplex_token, repo, hostname)
         ps.wait()
 
-    launch(ctx, exec_fn)
+    launch(ctx, exec_fn, repo, app_key)
 
-# keep this private so we can refactor. it needs it
-def launch(ctx, exec_fn, log_shuttle=True, use_procfile=False):
-    # TODO: launch really sucks. if you have an /app/bin/foo binary, then cmd is
-    # an argument to that. if you don't then it's a shell command. that makes this
-    # code confusing as nuts. especially with so many branches when log_shuttle=True/False
-    # and use_procfile=True/False. what is what is what?!
 
-    # TODO: find a way to be able to call launch here without having called init
-    # first. init sets kube-env-vars and then we use them here. a lot of these things
-    # we can probably fetch from the api server. 
-    # we need repo and app_key to access the api server, but the rest maybe is not needed
-    # pod ip we can get from the kubernetes downward api?
+def load_configs(repo, app_key):
+    release = current_release(ctx.obj['host'], repo, app_key)
+    config = release["config"]
+    os.environ['LC_ALL'] = "en_US.UTF-8"
+    for key, value in config.iteritems():
+        os.environ[key] = value
 
-    # These vars are set by the pod spec and are present EXCEPT when you ssh in manually
-    # as is the case when you run remote observer or want a remote_console. In those cases
-    # we pull them from the file system instead. It's a bit of a hack. The init script
-    # creates those files.
-    ip = load_env_var('MY_POD_IP')
-    repo = load_env_var('REPO')
-    app_key = load_env_var('APP_KEY')
+# is this really needed? all it does it load up env vars
+def launch(ctx, exec_fn, repo, app_key):
+    # should this come from current_release or set as env var? only repo and app_key are 
+    # needed to fetch the current release.
     logplex_token = load_env_var('LOGPLEX_TOKEN')
 
+    release = current_release(ctx.obj['host'], repo, app_key)
+    customer_app_name = release["customer_app_name"]
+    hostname = get_hostname()
+
+    if is_distillery(customer_app_name):
+        set_distillery_env()
+
+    # this is sort of dangerous. the current release
+    # might have changed between here and when init
+    # was called. (init called when container started. 
+    # this called later during remote_console or something)
+    # that could cause some confusion..
+    # TODO: fetch the right release version from disk.
+    # TODO: upgrade should update the release version.
+    load_configs(repo, app_key)
+
+    with cd('/app'):
+        exec_fn(logplex_token, customer_app_name, repo, hostname)
+
+def set_distillery_env():
+    ip = load_env_var('MY_POD_IP')
     # TODO: now that we are no longer elixir-only, some of these things should be moved so
     # that they are only done for elixir apps. For example, ERLANG_COOKIE, vm.args stuff
     # REPLACE_OS_VARS, MY_NODE_NAME, libcluster stuff.
     erlang_cookie = load_env_var('ERLANG_COOKIE')
-
-    # this is sort of dangerous. the current release
-    # might have changed between here and when init
-    # was called. that could cause some confusion..
-    # TODO: fetch the right release version from disk.
-    # TODO: upgrade should update the release version.
-    release = current_release(ctx.obj['host'], repo, app_key)
-    config = release["config"]
-    customer_app_name = release["customer_app_name"]
-
+    # used only for distillery mode. indicates whether to generate and use default vm.args
+    # so that MY_NODE_NAME and MY_COOKIE work out of the box.
     os.environ['GIGALIXIR_DEFAULT_VMARGS'] = "true"
-    os.environ['MY_NODE_NAME'] = "%s@%s" % (repo, ip)
-    os.environ['MY_COOKIE'] = erlang_cookie
-    os.environ['LC_ALL'] = "en_US.UTF-8"
-
-    # TODO: if is_distillery(customer_app_name):
+    # mix mode does not replace os vars at runtime.
     os.environ['REPLACE_OS_VARS'] = "true"
     os.environ['RELX_REPLACE_OS_VARS'] = "true"
+    # mix mode has no way of configuring node name, cookie or any vm.args?
+    os.environ['MY_NODE_NAME'] = "%s@%s" % (repo, ip)
+    os.environ['MY_COOKIE'] = erlang_cookie
+    # if in mix mode, these are baked in at compile time
     os.environ['LIBCLUSTER_KUBERNETES_SELECTOR'] = "repo=%s" % repo
     os.environ['LIBCLUSTER_KUBERNETES_NODE_BASENAME'] = repo
 
-    # TODO: unused?
-    os.environ['LOGPLEX_TOKEN'] = logplex_token
-
-    for key, value in config.iteritems():
-        os.environ[key] = value
-
-    hostname = get_hostname()
-
-    # TODO: if is_distillery(customer_app_name):
+def maybe_use_default_vm_args():
     if os.environ['GIGALIXIR_DEFAULT_VMARGS'].lower() == "true":
         # bypass all the distillery vm.args stuff and use our own
         # we manually set VMARGS_PATH to say to distillery, use this one
@@ -340,20 +342,6 @@ def launch(ctx, exec_fn, log_shuttle=True, use_procfile=False):
         # we need it for all commands e.g. remote_console, not just init
         # os.environ.set('RELEASE_CONFIG_DIR', "/release-config")
         os.environ['VMARGS_PATH'] = "/release-config/vm.args"
-
-    with cd('/app'):
-        # even though /app/.bashrc loads the profile, this
-        # still needs to be here for the init case. the init
-        # case i.e. docker run ... gigalixir-run init does not
-        # start bash so .bashrc is not sourced.
-        # ssh into this container runs .bashrc so the user
-        # has access to mix and stuff
-        # move this into the functions that need it
-        # e.g. init, job, distillery_job
-        # not upgrade, run, bootstrap
-        load_profile(os.getcwd())
-        exec_fn(logplex_token, customer_app_name, repo, hostname)
-
 
 def log_start_and_stop_web(logplex_token, appname, hostname):
     # send some info through the log shuttle really quick to inform the customer
@@ -412,57 +400,6 @@ def shell_command_exec(cmd, ip, logplex_token, appname, hostname):
         cmd = list(cmd)
         os.execvp(cmd[0], cmd)
 
-def delete_me_soon():
-        if log_shuttle == True:
-            # appname used in logplex messages
-            appname = repo
-            hostname = get_hostname()
-
-            log_start_and_stop_web(repo, logplex_token, appname, hostname)
-
-            if use_procfile:
-                ps = foreman_start(customer_app_name, cmd)
-            else:
-                # kind of a hack here. if this is a distillery app, then we use the distillery boot script
-                # if it is a mix app, we run something like
-                # iex --name remsh@127.0.0.1 --cookie bar --remsh foo@127.0.0.1
-                # TODO: observer?
-                # TODO: upgrades?
-                # TODO: run?
-                # TODO: migrate?
-                # TODO: distillery?
-                app_path = '/app/bin/%s' % customer_app_name
-                if is_exe(app_path):
-                    # run it as a command to the app binary if it exists
-                    # no way to run shell commands if using distillery?
-                    # this feels like a mess. split out different functions for
-                    # shell command vs distillery app command
-                    ps = distillery_command(customer_app_name, cmd)
-                else:
-                    # just run it as a shell command
-                    ps = shell_command(cmd, logplex_token, appname, hostname)
-            pipe_to_log_shuttle(ps, cmd, logplex_token, appname, hostname)
-            ps.wait()
-        else:
-            if use_procfile:
-                # is this ever used?
-                # os.execv('/app/bin/%s' % app, ['foreman', 'start', '-d', '.', '--color', '--no-timestamp', '-f', procfile_path(os.getcwd())])
-                raise Exception("001: This should not happen. Please contact help@gigalixir.com")
-            else:
-                # kind of a hack here. if this is a distillery app, then we use the distillery boot script
-                # if it is a mix app, we run something like
-                # iex --name remsh@127.0.0.1 --cookie bar --remsh foo@127.0.0.1
-                # TODO: observer?
-                # TODO: upgrades?
-                # TODO: run?
-                # TODO: migrate?
-                # TODO: distillery?
-                app_path = '/app/bin/%s' % customer_app_name
-                if is_exe(app_path):
-                    distillery_command_exec(customer_app_name, cmd)
-                else:
-                    shell_command_exec(cmd, logplex_token, appname, hostname)
-
 def is_exe(fpath):
     return os.path.isfile(fpath) and os.access(fpath, os.X_OK)
 
@@ -474,9 +411,20 @@ def procfile_path(cwd):
     else:
         return 'Procfile'
 
-def load_profile(cwd):
-    for f in glob.glob("%s/.profile.d/*.sh" % cwd):
-        source(f)
+def load_profile():
+    # is this cd necessary?
+    with cd('/app'):
+        # even though /app/.bashrc loads the profile, this
+        # still needs to be here for the init case. the init
+        # case i.e. docker run ... gigalixir-run init does not
+        # start bash so .bashrc is not sourced.
+        # ssh into this container runs .bashrc so the user
+        # has access to mix and stuff
+        # move this into the functions that need it
+        # e.g. init, job, distillery_job
+        # not upgrade, run, bootstrap
+        for f in glob.glob("/app/.profile.d/*.sh"):
+            source(f)
 
 # from https://stackoverflow.com/a/7198338/365377
 def source(script):
@@ -581,6 +529,10 @@ def load_env_var(name):
     if name in os.environ:
         return os.environ[name]
     else:
+        # These vars are set by the pod spec and are present EXCEPT when you ssh in manually
+        # as is the case when you run remote observer or want a remote_console. In those cases
+        # we pull them from the file system instead. It's a bit of a hack. The init script
+        # creates those files.
         kube_var_path = "/kube-env-vars"
         path = '%s/%s' % (kube_var_path, name)
         if not os.path.exists(path):
