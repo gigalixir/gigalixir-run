@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(
-    name='gigalixir-run',
+    name='gigalixir_run',
     author='Jesse Shieh',
     author_email='jesse@gigalixir.com',
     version='0.1.1',
@@ -34,7 +34,7 @@ setup(
         'pytest-runner',
     ],
     tests_require=[
-        'pytest',
+        'pytest==3.1.3',
         'HTTPretty',
         'sure',
     ],
