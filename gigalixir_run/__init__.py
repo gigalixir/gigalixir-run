@@ -41,12 +41,12 @@ urllib3.contrib.pyopenssl.inject_into_urllib3()
 #
 # command         log_shuttle use_procfile is_distillery done?
 # init(mix)       True        True         False         first pass
-# init(distillery)True        True         True 
+# init(distillery)True        True         True          first pass
 # run(mix)        False       False        False         first pass
-# run(distillery) False       False        True
+# run(distillery) False       False        True          first pass
 # job             True        False        False         first pass
-# upgrade         True        False        True
-# distillery_job  True        False        True
+# upgrade         True        False        True          first pass
+# distillery_job  True        False        True          first pass
 # bootstrap       N/A         N/A          N/A, but True
 
 @click.group()
@@ -98,6 +98,27 @@ def init(ctx, repo, cmd, app_key):
     for key, value in config.iteritems():
         os.environ[key] = value
 
+    logplex_token = os.environ['LOGPLEX_TOKEN']
+    erlang_cookie = os.environ['ERLANG_COOKIE']
+    ip = os.environ['MY_POD_IP']
+    persist_env(repo, customer_app_name, app_key, logplex_token, erlang_cookie, ip)
+
+    download_file(slug_url, "/app/%s.tar.gz" % customer_app_name)
+    extract_file('/app', '%s.tar.gz' % customer_app_name)
+    maybe_start_epmd()
+
+    def exec_fn(logplex_token, customer_app_name, repo, hostname):
+        log_start_and_stop_web(logplex_token, repo, hostname)
+        if is_distillery(customer_app_name):
+            ps = distillery_command(customer_app_name, cmd)
+        else:
+            ps = foreman_start(customer_app_name, cmd)
+        pipe_to_log_shuttle(ps, cmd, logplex_token, repo, hostname)
+        ps.wait()
+
+    launch(ctx, exec_fn, use_procfile=True)
+
+def persist_env(repo, customer_app_name, app_key, logplex_token, erlang_cookie, ip):
     # HACK ALERT 
     # Save important env variables for observer and run-cmd when it SSHes in.
     # Normally these variables are set by the pod spec and injected by kubernetes, but 
@@ -119,24 +140,6 @@ def init(ctx, repo, cmd, app_key):
         f.write(app_key)
     with open('%s/LOGPLEX_TOKEN' % kube_var_path, 'w') as f:
         f.write(os.environ[ 'LOGPLEX_TOKEN' ])
-
-    # no need to load_env_var because we know it is in the environ
-    logplex_token = os.environ['LOGPLEX_TOKEN']
-
-    download_file(slug_url, "/app/%s.tar.gz" % customer_app_name)
-    extract_file('/app', '%s.tar.gz' % customer_app_name)
-    maybe_start_epmd()
-
-    def exec_fn(logplex_token, customer_app_name, repo, hostname):
-        log_start_and_stop_web(logplex_token, repo, hostname)
-        if is_distillery(customer_app_name):
-            ps = distillery_command(customer_app_name, cmd)
-        else:
-            ps = foreman_start(customer_app_name, cmd)
-        pipe_to_log_shuttle(ps, cmd, logplex_token, repo, hostname)
-        ps.wait()
-
-    launch(ctx, exec_fn, use_procfile=True)
 
 def extract_file(folder, filename):
     with cd(folder):
@@ -163,10 +166,13 @@ def distillery_job(ctx, cmd):
     download_file(slug_url, "/app/%s.tar.gz" % customer_app_name)
     extract_file('/app', '%s.tar.gz' % customer_app_name)
 
-    # wait, so use_procfile is true when in mix mode and init
-    # but false when in mix mode, but running a job? gaaah.
-    # TODO: enumerate all the ways launch is used and separate them
-    launch(ctx, cmd, log_shuttle=True)
+    def exec_fn(logplex_token, customer_app_name, repo, hostname):
+        log(logplex_token, repo, hostname, "Attempting to run 'bin/%s %s' in a new container." % (customer_app_name, ' '.join(cmd)))
+        ps = distillery_command(customer_app_name, cmd)
+        pipe_to_log_shuttle(ps, cmd, logplex_token, repo, hostname)
+        ps.wait()
+
+    launch(ctx, exec_fn, log_shuttle=True)
 
 @cli.command()
 @click.argument('cmd', nargs=-1)
@@ -175,7 +181,6 @@ def distillery_job(ctx, cmd):
 def job(ctx, cmd):
     repo = load_env_var('REPO')
     app_key = load_env_var('APP_KEY')
-    logplex_token = load_env_var('LOGPLEX_TOKEN')
     release = current_release(ctx.obj['host'], repo, app_key)
     slug_url = release["slug_url"]
     customer_app_name = release["customer_app_name"]
@@ -183,9 +188,6 @@ def job(ctx, cmd):
     download_file(slug_url, "/app/%s.tar.gz" % customer_app_name)
     extract_file('/app', '%s.tar.gz' % customer_app_name)
 
-    # wait, so use_procfile is true when in mix mode and init
-    # but false when in mix mode, but running a job? gaaah.
-    # TODO: enumerate all the ways launch is used and separate them
     def exec_fn(logplex_token, customer_app_name, repo, hostname):
         log(logplex_token, repo, hostname, "Attempting to run '%s' in a new container." % (' '.join(cmd)))
         ps = shell_command(cmd, logplex_token, repo, hostname)
@@ -245,6 +247,7 @@ def upgrade(ctx, version):
     release = current_release(ctx.obj['host'], repo, app_key)
     slug_url = release["slug_url"]
     config = release["config"]
+    customer_app_name = release["customer_app_name"]
 
     # get mix version from slug url. 
     # TODO: make this explicit in the database.
@@ -261,7 +264,14 @@ def upgrade(ctx, version):
     download_file(slug_url, "/app/releases/%s/%s.tar.gz" % (mix_version, app))
     extract_file("/app/releases/%s" % mix_version, '%s.tar.gz' % customer_app_name)
 
-    launch(ctx, ('upgrade', mix_version))
+    def exec_fn(logplex_token, customer_app_name, repo, hostname):
+        log(logplex_token, repo, hostname, "Attempting to upgrade '%s' on host '%s'\n" % (repo, hostname))
+        cmd = ('upgrade', mix_version)
+        ps = distillery_command(customer_app_name, cmd)
+        pipe_to_log_shuttle(ps, cmd, logplex_token, repo, hostname)
+        ps.wait()
+
+    launch(ctx, exec_fn)
 
 # keep this private so we can refactor. it needs it
 def launch(ctx, exec_fn, log_shuttle=True, use_procfile=False):
@@ -379,6 +389,7 @@ def foreman_start(customer_app_name, cmd):
     return subprocess.Popen(['foreman', 'start', '-d', '.', '--color', '--no-timestamp', '-f', procfile_path(os.getcwd())], stdout=subprocess.PIPE)
 
 def distillery_command(customer_app_name, cmd):
+    app_path = '/app/bin/%s' % customer_app_name
     return subprocess.Popen([app_path] + list(cmd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
 def distillery_command_exec(customer_app_name, cmd):
