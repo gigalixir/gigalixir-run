@@ -35,6 +35,7 @@ setup(
     ],
     tests_require=[
         'pytest==3.1.3',
+        'mock',
         'HTTPretty',
         'sure',
     ],

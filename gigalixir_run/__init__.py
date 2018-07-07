@@ -96,7 +96,7 @@ def init(ctx, repo, cmd, app_key):
     customer_app_name = release["customer_app_name"]
 
     for key, value in config.iteritems():
-        os.environ[key] = value
+        os.environ.set(key, value)
 
     # HACK ALERT 
     # Save important env variables for observer and run-cmd when it SSHes in.
@@ -108,9 +108,13 @@ def init(ctx, repo, cmd, app_key):
     if not os.path.exists(kube_var_path):
         os.makedirs(kube_var_path)
     with open('%s/MY_POD_IP' % kube_var_path, 'w') as f:
-        f.write(os.environ['MY_POD_IP'])
+        # we get get instead of [] so mock_calls works
+        # mock.call objects are tuple-like so __getitem__
+        # sort of conflicts with when you want to mock
+        # __getitem__! (i think anyway)
+        f.write(os.environ.get('MY_POD_IP'))
     with open('%s/ERLANG_COOKIE' % kube_var_path, 'w') as f:
-        f.write(os.environ['ERLANG_COOKIE'])
+        f.write(os.environ.get( 'ERLANG_COOKIE' ))
     with open('%s/REPO' % kube_var_path, 'w') as f:
         f.write(repo)
     with open('%s/APP' % kube_var_path, 'w') as f:
@@ -118,7 +122,7 @@ def init(ctx, repo, cmd, app_key):
     with open('%s/APP_KEY' % kube_var_path, 'w') as f:
         f.write(app_key)
     with open('%s/LOGPLEX_TOKEN' % kube_var_path, 'w') as f:
-        f.write(os.environ['LOGPLEX_TOKEN'])
+        f.write(os.environ.get( 'LOGPLEX_TOKEN' ))
 
     download_file(slug_url, "/app/%s.tar.gz" % customer_app_name)
 
@@ -214,7 +218,7 @@ def upgrade(ctx, version):
         os.makedirs(release_dir)
 
     for key, value in config.iteritems():
-        os.environ[key] = value
+        os.environ.set(key, value)
 
     download_file(slug_url, "/app/releases/%s/%s.tar.gz" % (mix_version, app))
     with cd("/app/releases/%s" % mix_version):
@@ -257,15 +261,15 @@ def launch(ctx, cmd, log_shuttle=True, use_procfile=False):
         app = f.read()
     with open('%s/LOGPLEX_TOKEN' % kube_var_path, 'r') as f:
         logplex_token = f.read()
-    os.environ['GIGALIXIR_DEFAULT_VMARGS'] = "true"
-    os.environ['REPLACE_OS_VARS'] = "true"
-    os.environ['RELX_REPLACE_OS_VARS'] = "true"
-    os.environ['MY_NODE_NAME'] = "%s@%s" % (repo, ip)
-    os.environ['MY_COOKIE'] = erlang_cookie
-    os.environ['LC_ALL'] = "en_US.UTF-8"
-    os.environ['LIBCLUSTER_KUBERNETES_SELECTOR'] = "repo=%s" % repo
-    os.environ['LIBCLUSTER_KUBERNETES_NODE_BASENAME'] = repo
-    os.environ['LOGPLEX_TOKEN'] = logplex_token
+    os.environ.set( 'GIGALIXIR_DEFAULT_VMARGS', "true")
+    os.environ.set( 'REPLACE_OS_VARS', "true")
+    os.environ.set( 'RELX_REPLACE_OS_VARS', "true")
+    os.environ.set( 'MY_NODE_NAME', "%s@%s" % (repo, ip))
+    os.environ.set( 'MY_COOKIE', erlang_cookie)
+    os.environ.set( 'LC_ALL', "en_US.UTF-8")
+    os.environ.set( 'LIBCLUSTER_KUBERNETES_SELECTOR', "repo=%s" % repo)
+    os.environ.set( 'LIBCLUSTER_KUBERNETES_NODE_BASENAME', repo)
+    os.environ.set( 'LOGPLEX_TOKEN', logplex_token)
 
     # this is sort of dangerous. the current release
     # might have changed between here and when init
@@ -279,25 +283,25 @@ def launch(ctx, cmd, log_shuttle=True, use_procfile=False):
     config = release["config"]
 
     for key, value in config.iteritems():
-        os.environ[key] = value
+        os.environ.set(key, value)
     port = os.environ.get('PORT')
 
-    if os.environ['GIGALIXIR_DEFAULT_VMARGS'].lower() == "true":
+    if os.environ.get( 'GIGALIXIR_DEFAULT_VMARGS' ).lower() == "true":
         # bypass all the distillery vm.args stuff and use our own
         # we manually set VMARGS_PATH to say to distillery, use this one
         # not any of the million other possible vm.args
         # this means we have to do variable substitution ourselves though =(
-        generate_vmargs(os.environ['MY_NODE_NAME'], os.environ['MY_COOKIE'])
+        generate_vmargs(os.environ.get( 'MY_NODE_NAME' ), os.environ.get( 'MY_COOKIE' ))
 
         # this needs to be here instead of in the kubernetes spec because
         # we need it for all commands e.g. remote_console, not just init
-        # os.environ['RELEASE_CONFIG_DIR'] = "/release-config"
-        os.environ['VMARGS_PATH'] = "/release-config/vm.args"
+        # os.environ.set('RELEASE_CONFIG_DIR', "/release-config")
+        os.environ.set('VMARGS_PATH', "/release-config/vm.args")
 
     with cd('/app'):
-        os.environ['GIGALIXIR_APP_NAME'] = app
-        os.environ['GIGALIXIR_COMMAND'] = ' '.join(cmd)
-        os.environ['PYTHONIOENCODING'] = 'utf-8'
+        os.environ.set('GIGALIXIR_APP_NAME', app)
+        os.environ.set('GIGALIXIR_COMMAND', ' '.join(cmd))
+        os.environ.set('PYTHONIOENCODING', 'utf-8')
 
         # even though /app/.bashrc loads the profile, this
         # still needs to be here for the init case. the init
@@ -371,7 +375,7 @@ def launch(ctx, cmd, log_shuttle=True, use_procfile=False):
                 else:
                     if list(cmd) == ['remote_console']:
                         iex_path = distutils.spawn.find_executable('iex')
-                        os.execv(iex_path, [iex_path, '--name', 'remsh@%s' % ip, '--cookie', os.environ['MY_COOKIE'], '--remsh', os.environ['MY_NODE_NAME']])
+                        os.execv(iex_path, [iex_path, '--name', 'remsh@%s' % ip, '--cookie', os.environ.get( 'MY_COOKIE' ), '--remsh', os.environ.get( 'MY_NODE_NAME' )])
                     else:
                         ps = subprocess.Popen(list(cmd))
                         ps.wait()
