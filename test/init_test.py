@@ -53,6 +53,10 @@ def test_logout(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
     pipe_read = mock.Mock(name='pipe_read')
     pipe_write = mock.Mock(name='pipe_write')
     mock_os.pipe.return_value = (pipe_read, pipe_write)
+
+    # use a real dictionary for environ
+    mock_os.environ = os.environ
+
     runner = CliRunner()
     # Make sure this test does not modify the user's netrc file.
     with runner.isolated_filesystem():
@@ -60,6 +64,9 @@ def test_logout(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
         os.environ['APP_KEY'] = 'fake-app-key'
         os.environ['LOGPLEX_TOKEN'] = 'fake-logplex-token'
         os.environ['ERLANG_COOKIE'] = 'fake-erlang-cookie'
+        os.environ['MY_POD_IP'] = '1.2.3.4'
+        os.environ['PORT'] = '4000'
+
         result = runner.invoke(gigalixir_run.cli, ['init', 'my_app', 'foreground'])
         assert result.output == ''
         assert result.exit_code == 0
@@ -74,9 +81,6 @@ def test_logout(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
            mock.call.path.exists().__nonzero__(),
            mock.call.path.exists('/kube-env-vars'),
            mock.call.path.exists().__nonzero__(),
-           mock.call.environ.get('MY_POD_IP'),
-           mock.call.environ.get('ERLANG_COOKIE'),
-           mock.call.environ.get('LOGPLEX_TOKEN'),
            mock.call.getcwd(),
            mock.call.path.expanduser('/app'),
            # mock.call.chdir(<MagicMock name='os.path.expanduser()' id='140584589731088'>),
@@ -86,35 +90,17 @@ def test_logout(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
            mock.call.walk('/app'),
            # mock.call.walk().__iter__(),
            mock.mock._Call(('walk().__iter__', (), {})),
-           mock.call.environ.set('GIGALIXIR_DEFAULT_VMARGS', 'true'),
-           mock.call.environ.set('REPLACE_OS_VARS', 'true'),
-           mock.call.environ.set('RELX_REPLACE_OS_VARS', 'true'),
-           mock.call.environ.set('MY_NODE_NAME', 'my_app@'),
-           mock.call.environ.set('MY_COOKIE', ''),
-           mock.call.environ.set('LC_ALL', 'en_US.UTF-8'),
-           mock.call.environ.set('LIBCLUSTER_KUBERNETES_SELECTOR', 'repo=my_app'),
-           mock.call.environ.set('LIBCLUSTER_KUBERNETES_NODE_BASENAME', 'my_app'),
-           mock.call.environ.set('LOGPLEX_TOKEN', ''),
-           mock.call.environ.get('PORT'),
-           mock.call.environ.get('GIGALIXIR_DEFAULT_VMARGS'),
-           mock.call.environ.get().lower(),
-           # mock.call.environ.get().lower().__eq__('true'),
-           mock.mock._Call(('environ.get().lower().__eq__', ('true',), {})),
-
+           # mock.call.path.dirname('/home/js/Development/gigalixir-run/gigalixir_run/__init__.pyc'),
+           mock.call.path.dirname(mock.ANY),
+           mock.call.path.join(mock.ANY, 'templates/vm.args.mustache'),
+           mock.mock._Call(('path.join().__eq__', ('/kube-env-vars/REPO',), {})),
            mock.call.getcwd(),
            mock.call.path.expanduser('/app'),
            # mock.call.chdir(<MagicMock name='os.path.expanduser()' id='140584589731088'>),
            mock.call.chdir(mock.ANY),
-           mock.call.environ.set('GIGALIXIR_APP_NAME', ''),
-           mock.call.environ.set('GIGALIXIR_COMMAND', u'foreground'),
-           mock.call.environ.set('PYTHONIOENCODING', 'utf-8'),
            mock.call.getcwd(),
            # mock.call.getcwd().__str__(),
            mock.mock._Call(('getcwd().__str__', (), {})),
-           # mock.call.environ.get().__ne__(None),
-           mock.mock._Call(('environ.get().__ne__', (None,), {})),
-           # mock.call.environ.get().__str__(),
-           mock.mock._Call(('environ.get().__str__', (), {})),
            mock.call.pipe(),
            # mock.call.write(<Mock name='pipe_write' id='140584625038544'>, "Attempting to start 'my_app' on host '<MagicMock name='subprocess.check_output().strip()' id='140584587942160'>'\nAttempting health checks on port <MagicMock name='os.environ.get()' id='140584588716240'>\n"),
            mock.call.write(mock.ANY, mock.ANY),
@@ -149,5 +135,8 @@ def test_logout(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
             mock.call('/kube-env-vars/REPO', 'r'),
             mock.call('/kube-env-vars/APP_KEY', 'r'),
             mock.call('/kube-env-vars/APP', 'r'),
-            mock.call('/kube-env-vars/LOGPLEX_TOKEN', 'r')
+            mock.call('/kube-env-vars/LOGPLEX_TOKEN', 'r'),
+            # mock.call(<MagicMock name='os.path.join()' id='139897244298064'>, 'r'),
+            mock.call(mock.ANY, 'r'),
+            mock.call('/release-config/vm.args', 'w')
         ]
