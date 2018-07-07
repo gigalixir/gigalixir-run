@@ -33,6 +33,9 @@ def mocked_requests_get(*args, **kwargs):
             "slug_url": "fake-slug-url",
             "customer_app_name": "fake-customer-app-name",
             "config": {
+                "DATABASE_URL": "fake-database-url",
+                "FOO": """1
+2"""
             }
         }}, 200)
     elif args[0] == 'fake-slug-url':
@@ -55,17 +58,18 @@ def test_logout(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
     mock_os.pipe.return_value = (pipe_read, pipe_write)
 
     # use a real dictionary for environ
-    mock_os.environ = os.environ
+    my_env = dict()
+    mock_os.environ = my_env
 
     runner = CliRunner()
     # Make sure this test does not modify the user's netrc file.
     with runner.isolated_filesystem():
         os.environ['HOME'] = '.'
         os.environ['APP_KEY'] = 'fake-app-key'
-        os.environ['LOGPLEX_TOKEN'] = 'fake-logplex-token'
-        os.environ['ERLANG_COOKIE'] = 'fake-erlang-cookie'
-        os.environ['MY_POD_IP'] = '1.2.3.4'
-        os.environ['PORT'] = '4000'
+        my_env['LOGPLEX_TOKEN'] = 'fake-logplex-token'
+        my_env['ERLANG_COOKIE'] = 'fake-erlang-cookie'
+        my_env['MY_POD_IP'] = '1.2.3.4'
+        my_env['PORT'] = '4000'
 
         result = runner.invoke(gigalixir_run.cli, ['init', 'my_app', 'foreground'])
         assert result.output == ''
@@ -140,3 +144,24 @@ def test_logout(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
             mock.call(mock.ANY, 'r'),
             mock.call('/release-config/vm.args', 'w')
         ]
+
+        assert my_env == {
+            'PYTHONIOENCODING': 'utf-8', 
+            'GIGALIXIR_DEFAULT_VMARGS': 'true', 
+            'REPLACE_OS_VARS': 'true', 
+            'RELX_REPLACE_OS_VARS': 'true', 
+            'LIBCLUSTER_KUBERNETES_NODE_BASENAME': 'my_app', 
+            'LIBCLUSTER_KUBERNETES_SELECTOR': 'repo=my_app', 
+            'MY_POD_IP': '1.2.3.4', 
+            'GIGALIXIR_COMMAND': u'foreground', 
+            'DATABASE_URL': 'fake-database-url', 
+            'MY_COOKIE': '', 
+            'MY_NODE_NAME': 'my_app@', 
+            'GIGALIXIR_APP_NAME': '', 
+            'ERLANG_COOKIE': 'fake-erlang-cookie', 
+            'LC_ALL': 'en_US.UTF-8', 
+            'FOO': '1\n2', 
+            'PORT': '4000', 
+            'LOGPLEX_TOKEN': '', 
+            'VMARGS_PATH': '/release-config/vm.args'
+        }
