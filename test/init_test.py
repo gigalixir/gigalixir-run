@@ -50,7 +50,7 @@ def mocked_requests_get(*args, **kwargs):
 @mock.patch('tarfile.open')
 @httpretty.activate
 def test_logout(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
-    stdin = mock.Mock(nmae='stdin')
+    stdin = mock.Mock(name='stdin')
     mock_subprocess.PIPE = stdin
 
     pipe_read = mock.Mock(name='pipe_read')
@@ -118,6 +118,35 @@ def test_logout(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
            mock.call.path.exists().__nonzero__(),
            # mock.call.chdir(<MagicMock name='os.getcwd()' id='140584589842768'>)
            mock.call.chdir(mock.ANY)
+        ]
+
+        print mock_subprocess.mock_calls
+        assert mock_subprocess.mock_calls == [
+            mock.call.check_call(['/bin/bash', '-c', u"curl https://api.gigalixir.com/api/apps/my_app/ssh_keys -u my_app:fake-app-key | jq -r '.data | .[]' > /root/.ssh/authorized_keys"]),
+            mock.call.Popen(['crontab'], stdin=stdin),
+            mock.call.Popen().communicate(u"* * * * * curl https://api.gigalixir.com/api/apps/my_app/ssh_keys -u my_app:fake-app-key | jq -r '.data | .[]' > /root/.ssh/authorized_keys && echo $(date) >> /var/log/cron.log\n"),
+            mock.call.Popen().stdin.close(),
+            mock.call.check_call(['cron']),
+            mock.call.check_call(['service', 'ssh', 'start']),
+            mock.call.check_output(['hostname']),
+            mock.call.check_output().strip(),
+            # mock.call.check_output().strip().__str__(),
+            mock.mock._Call(('check_output().strip().__str__', (), {})),
+            # mock.call.check_output().strip().__str__(),
+            mock.mock._Call(('check_output().strip().__str__', (), {})),
+            # mock.call.check_call(['/opt/gigalixir/bin/log-shuttle', '-logs-url=http://token:@post.logs.gigalixir.com/logs', '-appname', 'my_app', '-hostname', '<MagicMock', "name='subprocess.check_output().strip()'", "id='139706507347280'>", '-procid', 'gigalixir-run'], stdin=<Mock name='pipe_read' id='139706509973264'>),
+            mock.call.check_call(['/opt/gigalixir/bin/log-shuttle', '-logs-url=http://token:@post.logs.gigalixir.com/logs', '-appname', 'my_app', '-hostname', mock.ANY, mock.ANY, mock.ANY, '-procid', 'gigalixir-run'], stdin=pipe_read),
+            # mock.call.check_output().strip().__str__(),
+            mock.mock._Call(('check_output().strip().__str__', (), {})),
+            # mock.call.check_output().strip().__str__(),
+            mock.mock._Call(('check_output().strip().__str__', (), {})),
+            mock.call.Popen(['foreman', 'start', '-d', '.', '--color', '--no-timestamp', '-f', 'Procfile'], stdout=stdin),
+            # mock.call.check_call(['/opt/gigalixir/bin/log-shuttle', '-logs-url=http://token:@post.logs.gigalixir.com/logs', '-appname', 'my_app', '-hostname', '<MagicMock', "name='subprocess.check_output().strip()'", "id='140316095358288'>", '-procid', '<MagicMock', "name='subprocess.check_output().strip()'", "id='140316095358288'>", '-num-outlets', '1', '-batch-size=5', '-back-buff=5000'], stdin=<MagicMock name='subprocess.Popen().stdout' id='140316095582800'>),
+            # -hostname and -procid have 3 mock.ANYs behind it because
+            # the string representation of MagicMock is broken into
+            # 3 strings.. ugly.
+            mock.call.check_call(['/opt/gigalixir/bin/log-shuttle', '-logs-url=http://token:@post.logs.gigalixir.com/logs', '-appname', 'my_app', '-hostname', mock.ANY, mock.ANY, mock.ANY, '-procid', mock.ANY, mock.ANY, mock.ANY, '-num-outlets', '1', '-batch-size=5', '-back-buff=5000'], stdin=mock.ANY),
+            mock.call.Popen().wait()
         ]
 
         assert mock_get.mock_calls == [
