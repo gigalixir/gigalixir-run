@@ -294,10 +294,13 @@ def launch(ctx, exec_fn, repo, app_key):
     customer_app_name = release["customer_app_name"]
     hostname = get_hostname()
 
+    # iex --remsh uses MY_NODE_NAME and MY_COOKIE
+    ip = load_env_var('MY_POD_IP')
+    erlang_cookie = load_env_var('ERLANG_COOKIE')
+    os.environ['MY_NODE_NAME'] = "%s@%s" % (repo, ip)
+    os.environ['MY_COOKIE'] = erlang_cookie
     if is_distillery(customer_app_name):
-        ip = load_env_var('MY_POD_IP')
-        erlang_cookie = load_env_var('ERLANG_COOKIE')
-        set_distillery_env(repo, ip, erlang_cookie)
+        set_distillery_env(repo)
 
     # this is sort of dangerous. the current release
     # might have changed between here and when init
@@ -311,7 +314,7 @@ def launch(ctx, exec_fn, repo, app_key):
     with cd('/app'):
         exec_fn(logplex_token, customer_app_name, repo, hostname)
 
-def set_distillery_env(repo, ip, erlang_cookie):
+def set_distillery_env(repo):
     # TODO: now that we are no longer elixir-only, some of these things should be moved so
     # that they are only done for elixir apps. For example, ERLANG_COOKIE, vm.args stuff
     # REPLACE_OS_VARS, MY_NODE_NAME, libcluster stuff.
@@ -321,9 +324,6 @@ def set_distillery_env(repo, ip, erlang_cookie):
     # mix mode does not replace os vars at runtime.
     os.environ['REPLACE_OS_VARS'] = "true"
     os.environ['RELX_REPLACE_OS_VARS'] = "true"
-    # mix mode has no way of configuring node name, cookie or any vm.args?
-    os.environ['MY_NODE_NAME'] = "%s@%s" % (repo, ip)
-    os.environ['MY_COOKIE'] = erlang_cookie
     # if in mix mode, these are baked in at compile time
     os.environ['LIBCLUSTER_KUBERNETES_SELECTOR'] = "repo=%s" % repo
     os.environ['LIBCLUSTER_KUBERNETES_NODE_BASENAME'] = repo

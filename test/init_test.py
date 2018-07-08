@@ -523,33 +523,49 @@ def test_run_mix_remote_console(mock_tarfile, mock_os, mock_subprocess, mock_get
 
         assert result.output == ''
         assert result.exit_code == 0
+        assert my_env == {
+            # 'PYTHONIOENCODING': 'utf-8', 
+            # 'MY_POD_IP': '1.2.3.4', 
+            'DATABASE_URL': 'fake-database-url', 
+            'MY_COOKIE': 'fake-cookie', 
+            'MY_NODE_NAME': 'my_app@1.2.3.4', 
+            # 'ERLANG_COOKIE': 'fake-cookie', 
+            'LC_ALL': 'en_US.UTF-8', 
+            'FOO': '1\n2', 
+            # 'PORT': '4000', 
+            # 'LOGPLEX_TOKEN': '', 
+        }
+
         assert mock_tarfile.mock_calls == [
         ]
 
         assert mock_os.mock_calls == [
-           # mock.call.path.dirname('/home/js/Development/gigalixir-run/gigalixir_run/__init__.pyc'),
-           mock.call.path.dirname(mock.ANY),
-           mock.call.path.join(mock.ANY, 'templates/vm.args.mustache'),
-           mock.mock._Call(('path.join().__eq__', ('/kube-env-vars/REPO',), {})),
-           mock.mock._Call(('path.join().__eq__', ('/kube-env-vars/APP_KEY',), {})),
-           mock.mock._Call(('path.join().__eq__', ('/kube-env-vars/ERLANG_COOKIE',), {})),
-           mock.mock._Call(('path.join().__eq__', ('/kube-env-vars/APP',), {})),
-           mock.mock._Call(('path.join().__eq__', ('/kube-env-vars/MY_POD_IP',), {})),
-           mock.call.getcwd(),
-           mock.call.path.expanduser('/app'),
-           # mock.call.chdir(<MagicMock name='os.path.expanduser()' id='140584589731088'>),
-           mock.call.chdir(mock.ANY),
-           mock.call.getcwd(),
-           # mock.call.getcwd().__str__(),
-           mock.mock._Call(('getcwd().__str__', (), {})),
-           mock.call.path.isfile('/app/bin/fake-customer-app-name'),
-           # call.execv('/home/js/.asdf/shims/iex', ['/home/js/.asdf/shims/iex', '--name', 'remsh@1.2.3.4', '--cookie', '', '--remsh', 'my_app@1.2.3.4']) 
-           mock.call.execv(mock.ANY, [mock.ANY, '--name', 'remsh@1.2.3.4', '--cookie', 'fake-cookie', '--remsh', 'my_app@1.2.3.4']),
-           # mock.call.chdir(<MagicMock name='os.getcwd()' id='140584589842768'>)
-           mock.call.chdir(mock.ANY),
+            # load_env_var REPO
+            mock.call.path.exists('/kube-env-vars/REPO'),
+            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists('/kube-env-vars/APP_KEY'),
+            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists('/kube-env-vars/MY_POD_IP'),
+            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists('/kube-env-vars/LOGPLEX_TOKEN'),
+            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists('/kube-env-vars/ERLANG_COOKIE'),
+            mock.call.path.exists().__nonzero__(),
+            # IS_DISTILLERY
+            # access is not called when short circuited
+            mock.call.path.isfile('/app/bin/fake-customer-app-name'),
+        ] + ENTER_APP_FOLDER + [
+            # IS_DISTILLERY
+            # access is not called when short circuited
+            mock.call.path.isfile('/app/bin/fake-customer-app-name'),
+            # call.execv('/home/js/.asdf/shims/iex', ['/home/js/.asdf/shims/iex', '--name', 'remsh@1.2.3.4', '--cookie', '', '--remsh', 'my_app@1.2.3.4']) 
+            mock.call.execvp('iex', ['iex', '--name', 'remsh@1.2.3.4', '--cookie', 'fake-cookie', '--remsh', 'my_app@1.2.3.4']),
+        ] + EXIT_APP_FOLDER + [
         ]
 
         assert mock_subprocess.mock_calls == [
+           mock.call.check_output(['hostname']),
+           mock.call.check_output().strip(),
         ]
 
         assert mock_get.mock_calls == [
@@ -557,37 +573,16 @@ def test_run_mix_remote_console(mock_tarfile, mock_os, mock_subprocess, mock_get
         ]
 
         assert mock_open.mock_calls == [
-            mock.call('/kube-env-vars/MY_POD_IP', 'r'),
-            mock.call('/kube-env-vars/ERLANG_COOKIE', 'r'),
             mock.call('/kube-env-vars/REPO', 'r'),
             mock.call('/kube-env-vars/APP_KEY', 'r'),
-            mock.call('/kube-env-vars/APP', 'r'),
+            mock.call('/kube-env-vars/MY_POD_IP', 'r'),
             mock.call('/kube-env-vars/LOGPLEX_TOKEN', 'r'),
+            mock.call('/kube-env-vars/ERLANG_COOKIE', 'r'),
+            # generate_vmargs not needed for mix mode
             # mock.call(<MagicMock name='os.path.join()' id='139897244298064'>, 'r'),
-            mock.call(mock.ANY, 'r'),
-            mock.call('/release-config/vm.args', 'w')
+            # mock.call(mock.ANY, 'r'),
+            # mock.call('/release-config/vm.args', 'w')
         ]
-
-        assert my_env == {
-            'PYTHONIOENCODING': 'utf-8', 
-            'GIGALIXIR_DEFAULT_VMARGS': 'true', 
-            'REPLACE_OS_VARS': 'true', 
-            'RELX_REPLACE_OS_VARS': 'true', 
-            'LIBCLUSTER_KUBERNETES_NODE_BASENAME': 'my_app', 
-            'LIBCLUSTER_KUBERNETES_SELECTOR': 'repo=my_app', 
-            # 'MY_POD_IP': '1.2.3.4', 
-            'GIGALIXIR_COMMAND': u'remote_console', 
-            'DATABASE_URL': 'fake-database-url', 
-            'MY_COOKIE': 'fake-cookie', 
-            'MY_NODE_NAME': 'my_app@1.2.3.4', 
-            'GIGALIXIR_APP_NAME': 'fake-customer-app-name', 
-            # 'ERLANG_COOKIE': 'fake-cookie', 
-            'LC_ALL': 'en_US.UTF-8', 
-            'FOO': '1\n2', 
-            # 'PORT': '4000', 
-            'LOGPLEX_TOKEN': '', 
-            'VMARGS_PATH': '/release-config/vm.args'
-        }
 
 @mock.patch('gigalixir_run.open', side_effect=mocked_open_fn("my_app"))
 @mock.patch('requests.get', side_effect=mocked_requests_get)
