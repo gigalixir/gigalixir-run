@@ -675,3 +675,99 @@ def test_upgrade(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
             'VMARGS_PATH': '/release-config/vm.args'
         }
 
+@mock.patch('gigalixir_run.open', side_effect=mocked_open_fn("my_app"))
+@mock.patch('requests.get', side_effect=mocked_requests_get)
+@mock.patch('gigalixir_run.subprocess')
+@mock.patch('gigalixir_run.os')
+@mock.patch('tarfile.open')
+@httpretty.activate
+def test_run_mix_shell(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
+    mock_os.path.isfile.return_value = False
+    stdin = mock.Mock(name='stdin')
+    mock_subprocess.PIPE = stdin
+
+    pipe_read = mock.Mock(name='pipe_read')
+    pipe_write = mock.Mock(name='pipe_write')
+    mock_os.pipe.return_value = (pipe_read, pipe_write)
+
+    # use a real dictionary for environ
+    my_env = dict()
+    mock_os.environ = my_env
+    mock_os.X_OK = os.X_OK
+
+    runner = CliRunner()
+    # Make sure this test does not modify the user's netrc file.
+    with runner.isolated_filesystem():
+        os.environ['HOME'] = '.'
+
+        result = runner.invoke(gigalixir_run.cli, ['run', 'mix', 'ecto.migrate'])
+
+        assert result.output == ''
+        assert result.exit_code == 0
+        assert mock_tarfile.mock_calls == [
+        ]
+
+        assert mock_os.mock_calls == [
+           # mock.call.path.dirname('/home/js/Development/gigalixir-run/gigalixir_run/__init__.pyc'),
+           mock.call.path.dirname(mock.ANY),
+           mock.call.path.join(mock.ANY, 'templates/vm.args.mustache'),
+           mock.mock._Call(('path.join().__eq__', ('/kube-env-vars/REPO',), {})),
+           mock.mock._Call(('path.join().__eq__', ('/kube-env-vars/APP_KEY',), {})),
+           mock.mock._Call(('path.join().__eq__', ('/kube-env-vars/ERLANG_COOKIE',), {})),
+           mock.mock._Call(('path.join().__eq__', ('/kube-env-vars/APP',), {})),
+           mock.mock._Call(('path.join().__eq__', ('/kube-env-vars/MY_POD_IP',), {})),
+           mock.call.getcwd(),
+           mock.call.path.expanduser('/app'),
+           # mock.call.chdir(<MagicMock name='os.path.expanduser()' id='140584589731088'>),
+           mock.call.chdir(mock.ANY),
+           mock.call.getcwd(),
+           # mock.call.getcwd().__str__(),
+           mock.mock._Call(('getcwd().__str__', (), {})),
+           mock.call.path.isfile('/app/bin/fake-customer-app-name'),
+           # subprocess call here, not execv.. but it should be execvp?
+           # mock.call.chdir(<MagicMock name='os.getcwd()' id='140584589842768'>)
+           mock.call.chdir(mock.ANY),
+        ]
+
+        assert mock_subprocess.mock_calls == [
+            mock.call.Popen(['mix', 'ecto.migrate']),
+            mock.call.Popen().wait(),
+        ]
+
+        assert mock_get.mock_calls == [
+            mock.call(u'https://api.gigalixir.com/api/apps/my_app/releases/current', auth=(u'my_app', u'fake-app-key')),
+        ]
+
+        assert mock_open.mock_calls == [
+            mock.call('/kube-env-vars/MY_POD_IP', 'r'),
+            mock.call('/kube-env-vars/ERLANG_COOKIE', 'r'),
+            mock.call('/kube-env-vars/REPO', 'r'),
+            mock.call('/kube-env-vars/APP_KEY', 'r'),
+            mock.call('/kube-env-vars/APP', 'r'),
+            mock.call('/kube-env-vars/LOGPLEX_TOKEN', 'r'),
+            # mock.call(<MagicMock name='os.path.join()' id='139897244298064'>, 'r'),
+            mock.call(mock.ANY, 'r'),
+            mock.call('/release-config/vm.args', 'w')
+        ]
+
+        assert my_env == {
+            'PYTHONIOENCODING': 'utf-8', 
+            'GIGALIXIR_DEFAULT_VMARGS': 'true', 
+            'REPLACE_OS_VARS': 'true', 
+            'RELX_REPLACE_OS_VARS': 'true', 
+            'LIBCLUSTER_KUBERNETES_NODE_BASENAME': 'my_app', 
+            'LIBCLUSTER_KUBERNETES_SELECTOR': 'repo=my_app', 
+            # 'MY_POD_IP': '1.2.3.4', 
+            'GIGALIXIR_COMMAND': u'mix ecto.migrate', 
+            'DATABASE_URL': 'fake-database-url', 
+            'MY_COOKIE': 'fake-cookie', 
+            'MY_NODE_NAME': 'my_app@1.2.3.4', 
+            'GIGALIXIR_APP_NAME': 'fake-customer-app-name', 
+            # 'ERLANG_COOKIE': 'fake-erlang-cookie', 
+            'LC_ALL': 'en_US.UTF-8', 
+            'FOO': '1\n2', 
+            # 'PORT': '4000', 
+            'LOGPLEX_TOKEN': '', 
+            'VMARGS_PATH': '/release-config/vm.args'
+        }
+
