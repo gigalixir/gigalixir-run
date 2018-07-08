@@ -112,7 +112,7 @@ def init(ctx, repo, cmd, app_key, logplex_token, erlang_cookie, ip):
         pipe_to_log_shuttle(ps, cmd, logplex_token, repo, hostname)
         ps.wait()
 
-    launch(ctx, exec_fn, repo, app_key)
+    launch(ctx, exec_fn, repo, app_key, ip=ip, release=release)
 
 def persist_env(repo, customer_app_name, app_key, logplex_token, erlang_cookie, ip):
     # HACK ALERT 
@@ -208,7 +208,7 @@ def run(ctx, cmd):
             distillery_command_exec(customer_app_name, cmd)
         else:
             shell_command_exec(cmd, ip, logplex_token, repo, hostname)
-    launch(ctx, exec_fn, repo, app_key)
+    launch(ctx, exec_fn, repo, app_key, ip=ip)
 
 def generate_vmargs(node_name, cookie):
     script_dir = os.path.dirname(__file__) #<-- absolute dir the script is in
@@ -259,9 +259,6 @@ def upgrade(ctx, version):
     if not os.path.exists(release_dir):
         os.makedirs(release_dir)
 
-    for key, value in config.iteritems():
-        os.environ[key] = value
-
     download_file(slug_url, "/app/releases/%s/%s.tar.gz" % (mix_version, app))
     extract_file("/app/releases/%s" % mix_version, '%s.tar.gz' % customer_app_name)
 
@@ -273,28 +270,27 @@ def upgrade(ctx, version):
         pipe_to_log_shuttle(ps, cmd, logplex_token, repo, hostname)
         ps.wait()
 
-    launch(ctx, exec_fn, repo, app_key)
+    launch(ctx, exec_fn, repo, app_key, release=release)
 
 
-def load_configs(host, repo, app_key):
-    release = current_release(host, repo, app_key)
+def load_configs(release):
     config = release["config"]
     os.environ['LC_ALL'] = "en_US.UTF-8"
     for key, value in config.iteritems():
         os.environ[key] = value
 
 # is this really needed? all it does it load up env vars
-def launch(ctx, exec_fn, repo, app_key):
+def launch(ctx, exec_fn, repo, app_key, ip=None, release=None):
     # should this come from current_release or set as env var? only repo and app_key are 
     # needed to fetch the current release.
     logplex_token = load_env_var('LOGPLEX_TOKEN')
 
-    release = current_release(ctx.obj['host'], repo, app_key)
+    release = release or current_release(ctx.obj['host'], repo, app_key)
     customer_app_name = release["customer_app_name"]
     hostname = get_hostname()
 
     # iex --remsh uses MY_NODE_NAME and MY_COOKIE
-    ip = load_env_var('MY_POD_IP')
+    ip = ip or load_env_var('MY_POD_IP')
     erlang_cookie = load_env_var('ERLANG_COOKIE')
     os.environ['MY_NODE_NAME'] = "%s@%s" % (repo, ip)
     os.environ['MY_COOKIE'] = erlang_cookie
@@ -308,7 +304,7 @@ def launch(ctx, exec_fn, repo, app_key):
     # that could cause some confusion..
     # TODO: fetch the right release version from disk.
     # TODO: upgrade should update the release version.
-    load_configs(ctx.obj['host'], repo, app_key)
+    load_configs(release)
 
     with cd('/app'):
         exec_fn(logplex_token, customer_app_name, repo, hostname)
@@ -501,6 +497,7 @@ class Memoize:
     def __init__(self, f):
         self.f = f
         self.memo = {}
+
     def __call__(self, *args):
         if not args in self.memo:
             self.memo[args] = self.f(*args)
@@ -508,18 +505,19 @@ class Memoize:
         return self.memo[args]
 
 # memozied so 1. it is the same everytime for a given process and 2. more efficient
-@Memoize
+# @Memoize
 def current_release(host, repo, app_key):
     r = requests.get("%s/api/apps/%s/releases/current" % (host, repo), auth = (repo, app_key)) 
     if r.status_code != 200:
         raise Exception(r)
     return r.json()["data"]
 
-@Memoize
 def get_hostname():
     return subprocess.check_output(["hostname"]).strip()
 
-@Memoize
+# not memoizing because it messes up tests.
+# see https://stackoverflow.com/questions/29953764/how-can-memoized-functions-be-tested
+# @Memoize
 def load_env_var(name):
     if name in os.environ:
         return os.environ[name]

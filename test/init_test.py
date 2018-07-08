@@ -7,6 +7,16 @@ from click.testing import CliRunner
 import httpretty
 import gigalixir_run
 import mock
+import functools
+
+def preserve_env(f):
+    @functools.wraps(f)
+    def wrapper(*args, **kwargs):
+        old = os.environ.copy()
+        result = f(*args, **kwargs)
+        os.environ = old
+        return result
+    return wrapper
 
 # test job and distillery_job
 FOREMAN_START = [
@@ -57,7 +67,11 @@ LOG_MESSAGE = [
    mock.call.close(mock.ANY),
 ]
 
-IS_DISTILLERY = [
+IS_DISTILLERY_FALSE = [
+    # access is not called when short circuited
+    mock.call.path.isfile('/app/bin/fake-customer-app-name'),
+]
+IS_DISTILLERY_TRUE = [
    mock.call.path.isfile('/app/bin/fake-customer-app-name'),
    # mock.call.path.isfile().__nonzero__(),
    mock.call.access('/app/bin/fake-customer-app-name', os.X_OK),
@@ -136,6 +150,7 @@ def mocked_requests_get(*args, **kwargs):
 @mock.patch('gigalixir_run.os')
 @mock.patch('tarfile.open')
 @httpretty.activate
+@preserve_env
 def test_mix_init(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
     mock_os.path.isfile.return_value = False
     stdin = mock.Mock(name='stdin')
@@ -174,8 +189,8 @@ def test_mix_init(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
             'PYTHONIOENCODING': 'utf-8', 
             'MY_POD_IP': '1.2.3.4', 
             'DATABASE_URL': 'fake-database-url', 
-            # 'MY_COOKIE': 'fake-cookie', 
-            # 'MY_NODE_NAME': 'my_app@1.2.3.4', 
+            'MY_COOKIE': 'fake-cookie', 
+            'MY_NODE_NAME': 'my_app@1.2.3.4', 
             'ERLANG_COOKIE': 'fake-cookie', 
             'LC_ALL': 'en_US.UTF-8', 
             'FOO': '1\n2', 
@@ -194,16 +209,10 @@ def test_mix_init(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
         ] + PERSIST_ENV + [
         ] + EXTRACT_FILE + [
         ] + START_EPMD + [
-            # IS_DISTILLERY
-            # access is not called when short circuited
-            mock.call.path.isfile('/app/bin/fake-customer-app-name'),
+        ] + IS_DISTILLERY_FALSE + [
         ] + ENTER_APP_FOLDER + [
         ] + LOG_MESSAGE + [
-            # IS_DISTILLERY
-            # access is not called when short circuited
-            mock.call.path.isfile('/app/bin/fake-customer-app-name'),
-        # no vmargs generated for mix
-        # ] + GENERATE_VMARGS + [
+        ] + IS_DISTILLERY_FALSE + [
         ] + FOREMAN_START + [
         ] + EXIT_APP_FOLDER + [
         ]
@@ -257,6 +266,7 @@ def test_mix_init(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
 @mock.patch('gigalixir_run.os')
 @mock.patch('tarfile.open')
 @httpretty.activate
+@preserve_env
 def test_distillery_init(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
     mock_os.path.isfile.return_value = True
     stdin = mock.Mock(name='stdin')
@@ -321,10 +331,10 @@ def test_distillery_init(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_
         ] + PERSIST_ENV + [
         ] + EXTRACT_FILE + [
         ] + START_EPMD + [
-        ] + IS_DISTILLERY + [
+        ] + IS_DISTILLERY_TRUE + [
         ] + ENTER_APP_FOLDER + [
         ] + LOG_MESSAGE + [
-        ] + IS_DISTILLERY + [
+        ] + IS_DISTILLERY_TRUE + [
         ] + GENERATE_VMARGS + [
         ] + FOREMAN_START + [
         ] + EXIT_APP_FOLDER + [
@@ -379,6 +389,7 @@ def test_distillery_init(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_
 @mock.patch('gigalixir_run.os')
 @mock.patch('tarfile.open')
 @httpretty.activate
+@preserve_env
 def test_custom_vmargs(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
     mock_os.path.isfile.return_value = True
     stdin = mock.Mock(name='stdin')
@@ -443,10 +454,10 @@ def test_custom_vmargs(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_op
         ] + PERSIST_ENV + [
         ] + EXTRACT_FILE + [
         ] + START_EPMD + [
-        ] + IS_DISTILLERY + [
+        ] + IS_DISTILLERY_TRUE + [
         ] + ENTER_APP_FOLDER + [
         ] + LOG_MESSAGE + [
-        ] + IS_DISTILLERY + [
+        ] + IS_DISTILLERY_TRUE + [
         # not for custom_vmargs
         # ] + GENERATE_VMARGS + [
         ] + FOREMAN_START + [
@@ -503,6 +514,7 @@ def test_custom_vmargs(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_op
 @mock.patch('gigalixir_run.os')
 @mock.patch('tarfile.open')
 @httpretty.activate
+@preserve_env
 def test_run_mix_remote_console(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
     mock_os.path.isfile.return_value = False
     stdin = mock.Mock(name='stdin')
@@ -554,13 +566,9 @@ def test_run_mix_remote_console(mock_tarfile, mock_os, mock_subprocess, mock_get
             mock.call.path.exists().__nonzero__(),
             mock.call.path.exists('/kube-env-vars/ERLANG_COOKIE'),
             mock.call.path.exists().__nonzero__(),
-            # IS_DISTILLERY
-            # access is not called when short circuited
-            mock.call.path.isfile('/app/bin/fake-customer-app-name'),
+        ] + IS_DISTILLERY_FALSE + [
         ] + ENTER_APP_FOLDER + [
-            # IS_DISTILLERY
-            # access is not called when short circuited
-            mock.call.path.isfile('/app/bin/fake-customer-app-name'),
+        ] + IS_DISTILLERY_FALSE + [
             # call.execv('/home/js/.asdf/shims/iex', ['/home/js/.asdf/shims/iex', '--name', 'remsh@1.2.3.4', '--cookie', '', '--remsh', 'my_app@1.2.3.4']) 
             mock.call.execvp('iex', ['iex', '--name', 'remsh@1.2.3.4', '--cookie', 'fake-cookie', '--remsh', 'my_app@1.2.3.4']),
         ] + EXIT_APP_FOLDER + [
@@ -593,6 +601,7 @@ def test_run_mix_remote_console(mock_tarfile, mock_os, mock_subprocess, mock_get
 @mock.patch('gigalixir_run.os')
 @mock.patch('tarfile.open')
 @httpretty.activate
+@preserve_env
 def test_run_distillery_remote_console(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
     mock_os.path.isfile.return_value = True
     stdin = mock.Mock(name='stdin')
@@ -648,9 +657,9 @@ def test_run_distillery_remote_console(mock_tarfile, mock_os, mock_subprocess, m
             mock.call.path.exists().__nonzero__(),
             mock.call.path.exists('/kube-env-vars/ERLANG_COOKIE'),
             mock.call.path.exists().__nonzero__(),
-        ] + IS_DISTILLERY + [
+        ] + IS_DISTILLERY_TRUE + [
         ] + ENTER_APP_FOLDER + [
-        ] + IS_DISTILLERY + [
+        ] + IS_DISTILLERY_TRUE + [
             mock.call.execv('/app/bin/fake-customer-app-name', ['/app/bin/fake-customer-app-name', 'remote_console']),
         ] + EXIT_APP_FOLDER + [
         ]
@@ -682,6 +691,7 @@ def test_run_distillery_remote_console(mock_tarfile, mock_os, mock_subprocess, m
 @mock.patch('gigalixir_run.os')
 @mock.patch('tarfile.open')
 @httpretty.activate
+@preserve_env
 def test_upgrade(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
     mock_os.path.isfile.return_value = True
     stdin = mock.Mock(name='stdin')
@@ -736,7 +746,7 @@ def test_upgrade(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
             mock.call.path.exists().__nonzero__(),
             mock.call.path.exists('/kube-env-vars/ERLANG_COOKIE'),
             mock.call.path.exists().__nonzero__(),
-        ] + IS_DISTILLERY + [
+        ] + IS_DISTILLERY_TRUE + [
         ] + ENTER_APP_FOLDER + [
         ] + LOG_MESSAGE + [
         ] + GENERATE_VMARGS + [
@@ -800,6 +810,7 @@ def test_upgrade(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
 @mock.patch('gigalixir_run.os')
 @mock.patch('tarfile.open')
 @httpretty.activate
+@preserve_env
 def test_run_mix_shell(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
     mock_os.path.isfile.return_value = False
     stdin = mock.Mock(name='stdin')
@@ -827,30 +838,27 @@ def test_run_mix_shell(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_op
         ]
 
         assert mock_os.mock_calls == [
-           # mock.call.path.dirname('/home/js/Development/gigalixir-run/gigalixir_run/__init__.pyc'),
-           mock.call.path.dirname(mock.ANY),
-           mock.call.path.join(mock.ANY, 'templates/vm.args.mustache'),
-           mock.mock._Call(('path.join().__eq__', ('/kube-env-vars/REPO',), {})),
-           mock.mock._Call(('path.join().__eq__', ('/kube-env-vars/APP_KEY',), {})),
-           mock.mock._Call(('path.join().__eq__', ('/kube-env-vars/ERLANG_COOKIE',), {})),
-           mock.mock._Call(('path.join().__eq__', ('/kube-env-vars/APP',), {})),
-           mock.mock._Call(('path.join().__eq__', ('/kube-env-vars/MY_POD_IP',), {})),
-           mock.call.getcwd(),
-           mock.call.path.expanduser('/app'),
-           # mock.call.chdir(<MagicMock name='os.path.expanduser()' id='140584589731088'>),
-           mock.call.chdir(mock.ANY),
-           mock.call.getcwd(),
-           # mock.call.getcwd().__str__(),
-           mock.mock._Call(('getcwd().__str__', (), {})),
-           mock.call.path.isfile('/app/bin/fake-customer-app-name'),
-           # subprocess call here, not execv.. but it should be execvp?
-           # mock.call.chdir(<MagicMock name='os.getcwd()' id='140584589842768'>)
-           mock.call.chdir(mock.ANY),
+            # load_env_var REPO
+            mock.call.path.exists('/kube-env-vars/REPO'),
+            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists('/kube-env-vars/APP_KEY'),
+            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists('/kube-env-vars/MY_POD_IP'),
+            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists('/kube-env-vars/LOGPLEX_TOKEN'),
+            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists('/kube-env-vars/ERLANG_COOKIE'),
+            mock.call.path.exists().__nonzero__(),
+        ] + IS_DISTILLERY_FALSE + [
+        ] + ENTER_APP_FOLDER + [
+        ] + IS_DISTILLERY_FALSE + [
+            mock.call.execvp('mix', ['mix', 'ecto.migrate']),
+        ] + EXIT_APP_FOLDER + [
         ]
 
         assert mock_subprocess.mock_calls == [
-            mock.call.Popen(['mix', 'ecto.migrate']),
-            mock.call.Popen().wait(),
+            mock.call.check_output(['hostname']),
+            mock.call.check_output().strip(),
         ]
 
         assert mock_get.mock_calls == [
@@ -858,35 +866,21 @@ def test_run_mix_shell(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_op
         ]
 
         assert mock_open.mock_calls == [
-            mock.call('/kube-env-vars/MY_POD_IP', 'r'),
-            mock.call('/kube-env-vars/ERLANG_COOKIE', 'r'),
             mock.call('/kube-env-vars/REPO', 'r'),
             mock.call('/kube-env-vars/APP_KEY', 'r'),
-            mock.call('/kube-env-vars/APP', 'r'),
+            mock.call('/kube-env-vars/MY_POD_IP', 'r'),
             mock.call('/kube-env-vars/LOGPLEX_TOKEN', 'r'),
-            # mock.call(<MagicMock name='os.path.join()' id='139897244298064'>, 'r'),
-            mock.call(mock.ANY, 'r'),
-            mock.call('/release-config/vm.args', 'w')
+            mock.call('/kube-env-vars/ERLANG_COOKIE', 'r'),
         ]
 
         assert my_env == {
-            'PYTHONIOENCODING': 'utf-8', 
-            'GIGALIXIR_DEFAULT_VMARGS': 'true', 
-            'REPLACE_OS_VARS': 'true', 
-            'RELX_REPLACE_OS_VARS': 'true', 
-            'LIBCLUSTER_KUBERNETES_NODE_BASENAME': 'my_app', 
-            'LIBCLUSTER_KUBERNETES_SELECTOR': 'repo=my_app', 
             # 'MY_POD_IP': '1.2.3.4', 
-            'GIGALIXIR_COMMAND': u'mix ecto.migrate', 
             'DATABASE_URL': 'fake-database-url', 
             'MY_COOKIE': 'fake-cookie', 
             'MY_NODE_NAME': 'my_app@1.2.3.4', 
-            'GIGALIXIR_APP_NAME': 'fake-customer-app-name', 
             # 'ERLANG_COOKIE': 'fake-cookie', 
             'LC_ALL': 'en_US.UTF-8', 
             'FOO': '1\n2', 
             # 'PORT': '4000', 
-            'LOGPLEX_TOKEN': '', 
-            'VMARGS_PATH': '/release-config/vm.args'
         }
 
