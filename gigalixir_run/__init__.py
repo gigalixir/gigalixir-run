@@ -170,7 +170,7 @@ def distillery_job(ctx, cmd):
         pipe_to_log_shuttle(ps, cmd, logplex_token, repo, hostname)
         ps.wait()
 
-    launch(ctx, exec_fn, repo, app_key)
+    launch(ctx, exec_fn, repo, app_key, release=release)
 
 @cli.command()
 @click.argument('cmd', nargs=-1)
@@ -193,7 +193,7 @@ def job(ctx, cmd):
         pipe_to_log_shuttle(ps, cmd, logplex_token, repo, hostname)
         ps.wait()
 
-    launch(ctx, exec_fn, repo, app_key)
+    launch(ctx, exec_fn, repo, app_key, release=release)
 
 @cli.command()
 @click.argument('cmd', nargs=-1)
@@ -492,20 +492,6 @@ def start_ssh(repo, app_key):
     # Cron is needed to update ssh keys>
     subprocess.check_call(['service', 'ssh', 'start'])
 
-# from: https://stackoverflow.com/questions/1988804/what-is-memoization-and-how-can-i-use-it-in-python
-class Memoize:
-    def __init__(self, f):
-        self.f = f
-        self.memo = {}
-
-    def __call__(self, *args):
-        if not args in self.memo:
-            self.memo[args] = self.f(*args)
-        # Warning: You may wish to do a deepcopy here if returning objects
-        return self.memo[args]
-
-# memozied so 1. it is the same everytime for a given process and 2. more efficient
-# @Memoize
 def current_release(host, repo, app_key):
     r = requests.get("%s/api/apps/%s/releases/current" % (host, repo), auth = (repo, app_key)) 
     if r.status_code != 200:
@@ -515,9 +501,6 @@ def current_release(host, repo, app_key):
 def get_hostname():
     return subprocess.check_output(["hostname"]).strip()
 
-# not memoizing because it messes up tests.
-# see https://stackoverflow.com/questions/29953764/how-can-memoized-functions-be-tested
-# @Memoize
 def load_env_var(name):
     if name in os.environ:
         return os.environ[name]

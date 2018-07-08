@@ -9,15 +9,6 @@ import gigalixir_run
 import mock
 import functools
 
-def preserve_env(f):
-    @functools.wraps(f)
-    def wrapper(*args, **kwargs):
-        old = os.environ.copy()
-        result = f(*args, **kwargs)
-        os.environ = old
-        return result
-    return wrapper
-
 # test job and distillery_job
 FOREMAN_START = [
    mock.call.getcwd(),
@@ -150,7 +141,6 @@ def mocked_requests_get(*args, **kwargs):
 @mock.patch('gigalixir_run.os')
 @mock.patch('tarfile.open')
 @httpretty.activate
-@preserve_env
 def test_mix_init(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
     mock_os.path.isfile.return_value = False
     stdin = mock.Mock(name='stdin')
@@ -217,7 +207,6 @@ def test_mix_init(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
         ] + EXIT_APP_FOLDER + [
         ]
 
-        print mock_subprocess.mock_calls
         assert mock_subprocess.mock_calls == [
             mock.call.check_call(['/bin/bash', '-c', u"curl https://api.gigalixir.com/api/apps/my_app/ssh_keys -u my_app:fake-app-key | jq -r '.data | .[]' > /root/.ssh/authorized_keys"]),
             mock.call.Popen(['crontab'], stdin=stdin),
@@ -260,13 +249,13 @@ def test_mix_init(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
             # mock.call(mock.ANY, 'r'),
             # mock.call('/release-config/vm.args', 'w'),
         ]
+
 @mock.patch('gigalixir_run.open', side_effect=mocked_open_fn("my_app"))
 @mock.patch('requests.get', side_effect=mocked_requests_get)
 @mock.patch('gigalixir_run.subprocess')
 @mock.patch('gigalixir_run.os')
 @mock.patch('tarfile.open')
 @httpretty.activate
-@preserve_env
 def test_distillery_init(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
     mock_os.path.isfile.return_value = True
     stdin = mock.Mock(name='stdin')
@@ -340,7 +329,6 @@ def test_distillery_init(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_
         ] + EXIT_APP_FOLDER + [
         ]
 
-        print mock_subprocess.mock_calls
         assert mock_subprocess.mock_calls == [
             mock.call.check_call(['/bin/bash', '-c', u"curl https://api.gigalixir.com/api/apps/my_app/ssh_keys -u my_app:fake-app-key | jq -r '.data | .[]' > /root/.ssh/authorized_keys"]),
             mock.call.Popen(['crontab'], stdin=stdin),
@@ -389,8 +377,7 @@ def test_distillery_init(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_
 @mock.patch('gigalixir_run.os')
 @mock.patch('tarfile.open')
 @httpretty.activate
-@preserve_env
-def test_custom_vmargs(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
+def test_custom_vmargs_init(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
     mock_os.path.isfile.return_value = True
     stdin = mock.Mock(name='stdin')
     mock_subprocess.PIPE = stdin
@@ -464,7 +451,6 @@ def test_custom_vmargs(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_op
         ] + EXIT_APP_FOLDER + [
         ]
 
-        print mock_subprocess.mock_calls
         assert mock_subprocess.mock_calls == [
             mock.call.check_call(['/bin/bash', '-c', u"curl https://api.gigalixir.com/api/apps/my_custom_vmargs_app/ssh_keys -u my_custom_vmargs_app:fake-app-key | jq -r '.data | .[]' > /root/.ssh/authorized_keys"]),
             mock.call.Popen(['crontab'], stdin=stdin),
@@ -500,12 +486,6 @@ def test_custom_vmargs(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_op
             mock.call('/kube-env-vars/APP_KEY', 'w'),
             mock.call('/kube-env-vars/LOGPLEX_TOKEN', 'w'),
             mock.call('/app/fake-customer-app-name.tar.gz', 'wb'),
-
-            # not for custom_vmargs
-            # generate_vmargs
-            # mock.call(<MagicMock name='os.path.join()' id='139897244298064'>, 'r'),
-            # mock.call(mock.ANY, 'r'),
-            # mock.call('/release-config/vm.args', 'w'),
         ]
 
 @mock.patch('gigalixir_run.open', side_effect=mocked_open_fn("my_app"))
@@ -514,7 +494,6 @@ def test_custom_vmargs(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_op
 @mock.patch('gigalixir_run.os')
 @mock.patch('tarfile.open')
 @httpretty.activate
-@preserve_env
 def test_run_mix_remote_console(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
     mock_os.path.isfile.return_value = False
     stdin = mock.Mock(name='stdin')
@@ -601,7 +580,6 @@ def test_run_mix_remote_console(mock_tarfile, mock_os, mock_subprocess, mock_get
 @mock.patch('gigalixir_run.os')
 @mock.patch('tarfile.open')
 @httpretty.activate
-@preserve_env
 def test_run_distillery_remote_console(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
     mock_os.path.isfile.return_value = True
     stdin = mock.Mock(name='stdin')
@@ -691,7 +669,6 @@ def test_run_distillery_remote_console(mock_tarfile, mock_os, mock_subprocess, m
 @mock.patch('gigalixir_run.os')
 @mock.patch('tarfile.open')
 @httpretty.activate
-@preserve_env
 def test_upgrade(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
     mock_os.path.isfile.return_value = True
     stdin = mock.Mock(name='stdin')
@@ -810,7 +787,6 @@ def test_upgrade(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
 @mock.patch('gigalixir_run.os')
 @mock.patch('tarfile.open')
 @httpretty.activate
-@preserve_env
 def test_run_mix_shell(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
     mock_os.path.isfile.return_value = False
     stdin = mock.Mock(name='stdin')
@@ -884,3 +860,181 @@ def test_run_mix_shell(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_op
             # 'PORT': '4000', 
         }
 
+@mock.patch('gigalixir_run.open', side_effect=mocked_open_fn("my_app"))
+@mock.patch('requests.get', side_effect=mocked_requests_get)
+@mock.patch('gigalixir_run.subprocess')
+@mock.patch('gigalixir_run.os')
+@mock.patch('tarfile.open')
+@httpretty.activate
+def test_mix_job(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
+    mock_os.path.isfile.return_value = False
+    stdin = mock.Mock(name='stdin')
+    mock_subprocess.PIPE = stdin
+
+    pipe_read = mock.Mock(name='pipe_read')
+    pipe_write = mock.Mock(name='pipe_write')
+    mock_os.pipe.return_value = (pipe_read, pipe_write)
+
+    # use a real dictionary for environ
+    my_env = dict()
+    mock_os.environ = my_env
+    mock_os.X_OK = os.X_OK
+
+    runner = CliRunner()
+    # Make sure this test does not modify the user's netrc file.
+    with runner.isolated_filesystem():
+        os.environ['HOME'] = '.'
+        my_env['LOGPLEX_TOKEN'] = 'fake-logplex-token'
+        my_env['ERLANG_COOKIE'] = 'fake-cookie'
+        my_env['MY_POD_IP'] = '1.2.3.4'
+        my_env['REPO'] = 'my_app'
+        my_env['APP_KEY'] = 'fake-app-key'
+
+        result = runner.invoke(gigalixir_run.cli, ['job', 'mix', 'ecto.migrate'])
+        assert result.output == ''
+        assert result.exit_code == 0
+        assert my_env == {
+            'REPO': 'my_app',
+            'APP_KEY': 'fake-app-key',
+            'MY_POD_IP': '1.2.3.4', 
+            'DATABASE_URL': 'fake-database-url', 
+            'MY_COOKIE': 'fake-cookie', 
+            'MY_NODE_NAME': 'my_app@1.2.3.4', 
+            'ERLANG_COOKIE': 'fake-cookie', 
+            'LC_ALL': 'en_US.UTF-8', 
+            'FOO': '1\n2', 
+            'LOGPLEX_TOKEN': 'fake-logplex-token', 
+        }
+
+        assert mock_tarfile.mock_calls == [
+            mock.call('fake-customer-app-name.tar.gz', 'r:gz'),
+            mock.call().extractall(),
+            mock.call().close()
+        ]
+
+        assert mock_os.mock_calls == [
+        ] + EXTRACT_FILE + [
+        ] + IS_DISTILLERY_FALSE + [
+        ] + ENTER_APP_FOLDER + [
+        ] + LOG_MESSAGE + [
+        ] + EXIT_APP_FOLDER + [
+        ]
+
+        assert mock_subprocess.mock_calls == [
+            mock.call.check_output(['hostname']),
+            mock.call.check_output().strip(),
+            mock.mock._Call(('check_output().strip().__str__', (), {})),
+            mock.call.check_call(['/opt/gigalixir/bin/log-shuttle', '-logs-url=http://token:fake-logplex-token@post.logs.gigalixir.com/logs', '-appname', 'my_app', '-hostname', mock.ANY, mock.ANY, mock.ANY, '-procid', 'gigalixir-run'], stdin=pipe_read),
+            mock.call.Popen(['mix', 'ecto.migrate'], stderr=mock.ANY, stdout=stdin),
+            mock.mock._Call(('check_output().strip().__str__', (), {})),
+            mock.mock._Call(('check_output().strip().__str__', (), {})),
+            # -hostname and -procid have 3 mock.ANYs behind it because
+            # the string representation of MagicMock is broken into
+            # 3 strings.. ugly.
+            mock.call.check_call(['/opt/gigalixir/bin/log-shuttle', '-logs-url=http://token:fake-logplex-token@post.logs.gigalixir.com/logs', '-appname', 'my_app', '-hostname', mock.ANY, mock.ANY, mock.ANY, '-procid', mock.ANY, mock.ANY, mock.ANY, '-num-outlets', '1', '-batch-size=5', '-back-buff=5000'], stdin=mock.ANY),
+            mock.call.Popen().wait()
+        ]
+
+        assert mock_get.mock_calls == [
+            mock.call(u'https://api.gigalixir.com/api/apps/my_app/releases/current', auth=(u'my_app', u'fake-app-key')),
+            mock.call('https://storage.googleapis.com/slug-bucket/production/sunny-wellgroomed-africanpiedkingfisher/releases/0.0.2/SHA/gigalixir_getting_started.tar.gz', stream=True),
+        ]
+
+        assert mock_open.mock_calls == [
+            mock.call('/app/fake-customer-app-name.tar.gz', 'wb'),
+        ]
+
+@mock.patch('gigalixir_run.open', side_effect=mocked_open_fn("my_app"))
+@mock.patch('requests.get', side_effect=mocked_requests_get)
+@mock.patch('gigalixir_run.subprocess')
+@mock.patch('gigalixir_run.os')
+@mock.patch('tarfile.open')
+@httpretty.activate
+def test_distillery_job(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
+    mock_os.path.isfile.return_value = True
+    stdin = mock.Mock(name='stdin')
+    mock_subprocess.PIPE = stdin
+
+    pipe_read = mock.Mock(name='pipe_read')
+    pipe_write = mock.Mock(name='pipe_write')
+    mock_os.pipe.return_value = (pipe_read, pipe_write)
+
+    # use a real dictionary for environ
+    my_env = dict()
+    mock_os.environ = my_env
+    mock_os.X_OK = os.X_OK
+
+    runner = CliRunner()
+    # Make sure this test does not modify the user's netrc file.
+    with runner.isolated_filesystem():
+        os.environ['HOME'] = '.'
+        my_env['LOGPLEX_TOKEN'] = 'fake-logplex-token'
+        my_env['ERLANG_COOKIE'] = 'fake-cookie'
+        my_env['MY_POD_IP'] = '1.2.3.4'
+        my_env['REPO'] = 'my_app'
+        my_env['APP_KEY'] = 'fake-app-key'
+
+        result = runner.invoke(gigalixir_run.cli, ['distillery_job', 'command', 'Elixir.Task', 'migrate'])
+        assert result.output == ''
+        assert result.exit_code == 0
+        assert my_env == {
+            'VMARGS_PATH': '/release-config/vm.args',
+            'GIGALIXIR_DEFAULT_VMARGS': 'true', 
+            'REPLACE_OS_VARS': 'true', 
+            'RELX_REPLACE_OS_VARS': 'true', 
+            'LIBCLUSTER_KUBERNETES_NODE_BASENAME': 'my_app', 
+            'LIBCLUSTER_KUBERNETES_SELECTOR': 'repo=my_app', 
+            'REPO': 'my_app',
+            'APP_KEY': 'fake-app-key',
+            'MY_POD_IP': '1.2.3.4', 
+            'DATABASE_URL': 'fake-database-url', 
+            'MY_COOKIE': 'fake-cookie', 
+            'MY_NODE_NAME': 'my_app@1.2.3.4', 
+            'ERLANG_COOKIE': 'fake-cookie', 
+            'LC_ALL': 'en_US.UTF-8', 
+            'FOO': '1\n2', 
+            'LOGPLEX_TOKEN': 'fake-logplex-token', 
+        }
+
+        assert mock_tarfile.mock_calls == [
+            mock.call('fake-customer-app-name.tar.gz', 'r:gz'),
+            mock.call().extractall(),
+            mock.call().close()
+        ]
+
+        assert mock_os.mock_calls == [
+        ] + EXTRACT_FILE + [
+        ] + IS_DISTILLERY_TRUE + [
+        ] + ENTER_APP_FOLDER + [
+        ] + LOG_MESSAGE + [
+        ] + GENERATE_VMARGS + [
+        ] + EXIT_APP_FOLDER + [
+        ]
+
+        assert mock_subprocess.mock_calls == [
+            mock.call.check_output(['hostname']),
+            mock.call.check_output().strip(),
+            mock.mock._Call(('check_output().strip().__str__', (), {})),
+            mock.call.check_call(['/opt/gigalixir/bin/log-shuttle', '-logs-url=http://token:fake-logplex-token@post.logs.gigalixir.com/logs', '-appname', 'my_app', '-hostname', mock.ANY, mock.ANY, mock.ANY, '-procid', 'gigalixir-run'], stdin=pipe_read),
+            mock.call.Popen(['/app/bin/fake-customer-app-name', 'command', 'Elixir.Task', 'migrate'], stderr=mock.ANY, stdout=stdin),
+            mock.mock._Call(('check_output().strip().__str__', (), {})),
+            mock.mock._Call(('check_output().strip().__str__', (), {})),
+            # -hostname and -procid have 3 mock.ANYs behind it because
+            # the string representation of MagicMock is broken into
+            # 3 strings.. ugly.
+            mock.call.check_call(['/opt/gigalixir/bin/log-shuttle', '-logs-url=http://token:fake-logplex-token@post.logs.gigalixir.com/logs', '-appname', 'my_app', '-hostname', mock.ANY, mock.ANY, mock.ANY, '-procid', mock.ANY, mock.ANY, mock.ANY, '-num-outlets', '1', '-batch-size=5', '-back-buff=5000'], stdin=mock.ANY),
+            mock.call.Popen().wait()
+        ]
+
+        assert mock_get.mock_calls == [
+            mock.call(u'https://api.gigalixir.com/api/apps/my_app/releases/current', auth=(u'my_app', u'fake-app-key')),
+            mock.call('https://storage.googleapis.com/slug-bucket/production/sunny-wellgroomed-africanpiedkingfisher/releases/0.0.2/SHA/gigalixir_getting_started.tar.gz', stream=True),
+        ]
+
+        assert mock_open.mock_calls == [
+            mock.call('/app/fake-customer-app-name.tar.gz', 'wb'),
+            # generate_vmargs
+            # mock.call(<MagicMock name='os.path.join()' id='139897244298064'>, 'r'),
+            mock.call(mock.ANY, 'r'),
+            mock.call('/release-config/vm.args', 'w'),
+        ]
