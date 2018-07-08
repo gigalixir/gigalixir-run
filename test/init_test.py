@@ -45,6 +45,7 @@ GENERATE_VMARGS = [
    mock.mock._Call(('path.join().__eq__', ('/kube-env-vars/REPO',), {})),
    mock.mock._Call(('path.join().__eq__', ('/kube-env-vars/APP_KEY',), {})),
    mock.mock._Call(('path.join().__eq__', ('/kube-env-vars/ERLANG_COOKIE',), {})),
+   mock.mock._Call(('path.join().__eq__', ('/kube-env-vars/LOGPLEX_TOKEN',), {})),
    mock.mock._Call(('path.join().__eq__', ('/kube-env-vars/APP',), {})),
    mock.mock._Call(('path.join().__eq__', ('/kube-env-vars/MY_POD_IP',), {})),
 ]
@@ -81,6 +82,8 @@ def mocked_open_fn(app_name):
             return mock.mock_open(read_data="fake-app-key").return_value
         elif args == ("/kube-env-vars/ERLANG_COOKIE", 'r'):
             return mock.mock_open(read_data="fake-cookie").return_value
+        elif args == ("/kube-env-vars/LOGPLEX_TOKEN", 'r'):
+            return mock.mock_open(read_data="fake-logplex-token").return_value
         elif args == ("/kube-env-vars/APP", 'r'):
             return mock.mock_open(read_data="fake-customer-app-name").return_value
         elif args == ("/kube-env-vars/MY_POD_IP", 'r'):
@@ -667,7 +670,7 @@ def test_run_distillery_remote_console(mock_tarfile, mock_os, mock_subprocess, m
             mock.call('/kube-env-vars/MY_POD_IP', 'r'),
             mock.call('/kube-env-vars/LOGPLEX_TOKEN', 'r'),
             mock.call('/kube-env-vars/ERLANG_COOKIE', 'r'),
-            # generate_vmargs not needed for mix mode
+            # generate_vmargs not needed for remote_console
             # mock.call(<MagicMock name='os.path.join()' id='139897244298064'>, 'r'),
             # mock.call(mock.ANY, 'r'),
             # mock.call('/release-config/vm.args', 'w')
@@ -680,6 +683,7 @@ def test_run_distillery_remote_console(mock_tarfile, mock_os, mock_subprocess, m
 @mock.patch('tarfile.open')
 @httpretty.activate
 def test_upgrade(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
+    mock_os.path.isfile.return_value = True
     stdin = mock.Mock(name='stdin')
     mock_subprocess.PIPE = stdin
 
@@ -708,54 +712,53 @@ def test_upgrade(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
         ]
 
         assert mock_os.mock_calls == [
+            # load_env_var REPO
+            mock.call.path.exists('/kube-env-vars/APP'),
+            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists('/kube-env-vars/REPO'),
+            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists('/kube-env-vars/APP_KEY'),
+            mock.call.path.exists().__nonzero__(),
             mock.call.path.exists('/app/releases/0.0.2'),
             mock.call.path.exists().__nonzero__(),
+            # enter release folder
             mock.call.getcwd(),
             mock.call.path.expanduser('/app/releases/0.0.2'),
             # call.chdir(<MagicMock name='os.path.expanduser()' id='140244186656208'>)
             mock.call.chdir(mock.ANY),
+            # exit release folder
             # call.chdir(<MagicMock name='os.getcwd()' id='140539945091920'>)
             mock.call.chdir(mock.ANY),
-            # mock.call.path.dirname('/home/js/Development/gigalixir-run/gigalixir_run/__init__.pyc'),
-            mock.call.path.dirname(mock.ANY),
-            mock.call.path.join(mock.ANY, 'templates/vm.args.mustache'),
-            mock.mock._Call(('path.join().__eq__', ('/kube-env-vars/REPO',), {})),
-            mock.mock._Call(('path.join().__eq__', ('/kube-env-vars/APP_KEY',), {})),
-           mock.mock._Call(('path.join().__eq__', ('/kube-env-vars/ERLANG_COOKIE',), {})),
-            mock.mock._Call(('path.join().__eq__', ('/kube-env-vars/APP',), {})),
-            mock.mock._Call(('path.join().__eq__', ('/kube-env-vars/MY_POD_IP',), {})),
-            mock.call.getcwd(),
-            mock.call.path.expanduser('/app'),
-            # mock.call.chdir(<MagicMock name='os.path.expanduser()' id='140584589731088'>),
-            mock.call.chdir(mock.ANY),
-            mock.call.getcwd(),
-            # mock.call.getcwd().__str__(),
-            mock.mock._Call(('getcwd().__str__', (), {})),
-            mock.call.path.isfile('/app/bin/fake-customer-app-name'),
-            mock.call.path.isfile().__nonzero__(),
-            mock.call.access('/app/bin/fake-customer-app-name', os.X_OK),
-            mock.call.access().__nonzero__(),
-            # subprocess call here instead of execv
-            # mock.call.chdir(<MagicMock name='os.getcwd()' id='140584589842768'>)
-            mock.call.chdir(mock.ANY),
+
+            mock.call.path.exists('/kube-env-vars/LOGPLEX_TOKEN'),
+            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists('/kube-env-vars/MY_POD_IP'),
+            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists('/kube-env-vars/ERLANG_COOKIE'),
+            mock.call.path.exists().__nonzero__(),
+        ] + IS_DISTILLERY + [
+        ] + ENTER_APP_FOLDER + [
+        ] + LOG_MESSAGE + [
+        ] + GENERATE_VMARGS + [
+        ] + EXIT_APP_FOLDER + [
         ]
 
         assert mock_subprocess.mock_calls == [
             mock.call.check_output(['hostname']),
             mock.call.check_output().strip(),
-            # mock.call.check_output().strip().__str__(),
             mock.mock._Call(('check_output().strip().__str__', (), {})),
-            # mock.call.check_output().strip().__str__(),
             mock.mock._Call(('check_output().strip().__str__', (), {})),
-            mock.call.Popen(['/app/bin/fake-customer-app-name', 'upgrade', '0.0.2'], stdout=stdin),
-            mock.call.check_call(['/opt/gigalixir/bin/log-shuttle', '-logs-url=http://token:@post.logs.gigalixir.com/logs', '-appname', 'my_app', '-hostname', mock.ANY, mock.ANY, mock.ANY, '-procid', mock.ANY, mock.ANY, mock.ANY, '-num-outlets', '1', '-batch-size=5', '-back-buff=5000'], stdin=mock.ANY),
+            mock.call.check_call(['/opt/gigalixir/bin/log-shuttle', '-logs-url=http://token:fake-logplex-token@post.logs.gigalixir.com/logs', '-appname', 'my_app', '-hostname', mock.ANY, mock.ANY, mock.ANY, '-procid', 'gigalixir-run'], stdin=pipe_read),
+            mock.call.Popen(['/app/bin/fake-customer-app-name', 'upgrade', '0.0.2'], stderr=mock.ANY, stdout=stdin),
+            mock.mock._Call(('check_output().strip().__str__', (), {})),
+            mock.mock._Call(('check_output().strip().__str__', (), {})),
+            mock.call.check_call(['/opt/gigalixir/bin/log-shuttle', '-logs-url=http://token:fake-logplex-token@post.logs.gigalixir.com/logs', '-appname', 'my_app', '-hostname', mock.ANY, mock.ANY, mock.ANY, '-procid', mock.ANY, mock.ANY, mock.ANY, '-num-outlets', '1', '-batch-size=5', '-back-buff=5000'], stdin=mock.ANY),
             mock.call.Popen().wait()
         ]
 
         assert mock_get.mock_calls == [
             mock.call(u'https://api.gigalixir.com/api/apps/my_app/releases/current', auth=(u'my_app', u'fake-app-key')),
             mock.call(u'https://storage.googleapis.com/slug-bucket/production/sunny-wellgroomed-africanpiedkingfisher/releases/0.0.2/SHA/gigalixir_getting_started.tar.gz', stream=True),
-            mock.call(u'https://api.gigalixir.com/api/apps/my_app/releases/current', auth=(u'my_app', u'fake-app-key')),
         ]
 
         assert mock_open.mock_calls == [
@@ -763,35 +766,31 @@ def test_upgrade(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
             mock.call('/kube-env-vars/REPO', 'r'),
             mock.call('/kube-env-vars/APP_KEY', 'r'),
             mock.call('/app/releases/0.0.2/fake-customer-app-name.tar.gz', 'wb'),
+            mock.call('/kube-env-vars/LOGPLEX_TOKEN', 'r'),
             mock.call('/kube-env-vars/MY_POD_IP', 'r'),
             mock.call('/kube-env-vars/ERLANG_COOKIE', 'r'),
-            mock.call('/kube-env-vars/REPO', 'r'),
-            mock.call('/kube-env-vars/APP_KEY', 'r'),
-            mock.call('/kube-env-vars/APP', 'r'),
-            mock.call('/kube-env-vars/LOGPLEX_TOKEN', 'r'),
+
+            # generate_vmargs
             # mock.call(<MagicMock name='os.path.join()' id='139897244298064'>, 'r'),
             mock.call(mock.ANY, 'r'),
-            mock.call('/release-config/vm.args', 'w')
+            mock.call('/release-config/vm.args', 'w'),
         ]
 
         assert my_env == {
-            'PYTHONIOENCODING': 'utf-8', 
             'GIGALIXIR_DEFAULT_VMARGS': 'true', 
             'REPLACE_OS_VARS': 'true', 
             'RELX_REPLACE_OS_VARS': 'true', 
             'LIBCLUSTER_KUBERNETES_NODE_BASENAME': 'my_app', 
             'LIBCLUSTER_KUBERNETES_SELECTOR': 'repo=my_app', 
             # 'MY_POD_IP': '1.2.3.4', 
-            'GIGALIXIR_COMMAND': u'upgrade 0.0.2', 
             'DATABASE_URL': 'fake-database-url', 
             'MY_COOKIE': 'fake-cookie', 
             'MY_NODE_NAME': 'my_app@1.2.3.4', 
-            'GIGALIXIR_APP_NAME': 'fake-customer-app-name', 
             # 'ERLANG_COOKIE': 'fake-cookie', 
             'LC_ALL': 'en_US.UTF-8', 
             'FOO': '1\n2', 
             # 'PORT': '4000', 
-            'LOGPLEX_TOKEN': '', 
+            # 'LOGPLEX_TOKEN': '', 
             'VMARGS_PATH': '/release-config/vm.args'
         }
 
