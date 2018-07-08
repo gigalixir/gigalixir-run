@@ -108,9 +108,7 @@ def init(ctx, repo, cmd, app_key, logplex_token, erlang_cookie, ip):
         load_profile()
         if is_distillery(customer_app_name):
             maybe_use_default_vm_args()
-            ps = distillery_command(customer_app_name, cmd)
-        else:
-            ps = foreman_start(customer_app_name, cmd)
+        ps = foreman_start(customer_app_name, cmd)
         pipe_to_log_shuttle(ps, cmd, logplex_token, repo, hostname)
         ps.wait()
 
@@ -279,8 +277,8 @@ def upgrade(ctx, version):
     launch(ctx, exec_fn, repo, app_key)
 
 
-def load_configs(repo, app_key):
-    release = current_release(ctx.obj['host'], repo, app_key)
+def load_configs(host, repo, app_key):
+    release = current_release(host, repo, app_key)
     config = release["config"]
     os.environ['LC_ALL'] = "en_US.UTF-8"
     for key, value in config.iteritems():
@@ -297,7 +295,9 @@ def launch(ctx, exec_fn, repo, app_key):
     hostname = get_hostname()
 
     if is_distillery(customer_app_name):
-        set_distillery_env()
+        ip = load_env_var('MY_POD_IP')
+        erlang_cookie = load_env_var('ERLANG_COOKIE')
+        set_distillery_env(repo, ip, erlang_cookie)
 
     # this is sort of dangerous. the current release
     # might have changed between here and when init
@@ -306,17 +306,15 @@ def launch(ctx, exec_fn, repo, app_key):
     # that could cause some confusion..
     # TODO: fetch the right release version from disk.
     # TODO: upgrade should update the release version.
-    load_configs(repo, app_key)
+    load_configs(ctx.obj['host'], repo, app_key)
 
     with cd('/app'):
         exec_fn(logplex_token, customer_app_name, repo, hostname)
 
-def set_distillery_env():
-    ip = load_env_var('MY_POD_IP')
+def set_distillery_env(repo, ip, erlang_cookie):
     # TODO: now that we are no longer elixir-only, some of these things should be moved so
     # that they are only done for elixir apps. For example, ERLANG_COOKIE, vm.args stuff
     # REPLACE_OS_VARS, MY_NODE_NAME, libcluster stuff.
-    erlang_cookie = load_env_var('ERLANG_COOKIE')
     # used only for distillery mode. indicates whether to generate and use default vm.args
     # so that MY_NODE_NAME and MY_COOKIE work out of the box.
     os.environ['GIGALIXIR_DEFAULT_VMARGS'] = "true"
@@ -412,19 +410,17 @@ def procfile_path(cwd):
         return 'Procfile'
 
 def load_profile():
-    # is this cd necessary?
-    with cd('/app'):
-        # even though /app/.bashrc loads the profile, this
-        # still needs to be here for the init case. the init
-        # case i.e. docker run ... gigalixir-run init does not
-        # start bash so .bashrc is not sourced.
-        # ssh into this container runs .bashrc so the user
-        # has access to mix and stuff
-        # move this into the functions that need it
-        # e.g. init, job, distillery_job
-        # not upgrade, run, bootstrap
-        for f in glob.glob("/app/.profile.d/*.sh"):
-            source(f)
+    # even though /app/.bashrc loads the profile, this
+    # still needs to be here for the init case. the init
+    # case i.e. docker run ... gigalixir-run init does not
+    # start bash so .bashrc is not sourced.
+    # ssh into this container runs .bashrc so the user
+    # has access to mix and stuff
+    # move this into the functions that need it
+    # e.g. init, job, distillery_job
+    # not upgrade, run, bootstrap
+    for f in glob.glob("/app/.profile.d/*.sh"):
+        source(f)
 
 # from https://stackoverflow.com/a/7198338/365377
 def source(script):
