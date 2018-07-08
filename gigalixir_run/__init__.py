@@ -205,7 +205,6 @@ def run(ctx, cmd):
     ip = load_env_var('MY_POD_IP')
     def exec_fn(logplex_token, customer_app_name, repo, hostname):
         if is_distillery(customer_app_name):
-            maybe_use_default_vm_args()
             distillery_command_exec(customer_app_name, cmd)
         else:
             shell_command_exec(cmd, ip, logplex_token, repo, hostname)
