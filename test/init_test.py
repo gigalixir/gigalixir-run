@@ -8,6 +8,8 @@ import httpretty
 import gigalixir_run
 import mock
 
+# test job and distillery_job
+
 def mocked_open_fn(app_name):
     def mocked_open(*args, **kwargs):
         if args == ("/kube-env-vars/REPO", 'r'):
