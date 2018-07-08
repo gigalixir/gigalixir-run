@@ -280,7 +280,7 @@ def launch(ctx, cmd, log_shuttle=True, use_procfile=False):
 
     for key, value in config.iteritems():
         os.environ[key] = value
-    port = os.environ['PORT']
+    port = os.environ.get('PORT')
 
     if os.environ[ 'GIGALIXIR_DEFAULT_VMARGS' ].lower() == "true":
         # bypass all the distillery vm.args stuff and use our own
