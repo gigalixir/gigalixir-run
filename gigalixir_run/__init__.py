@@ -166,7 +166,7 @@ def distillery_job(ctx, cmd):
         log(logplex_token, repo, hostname, "Attempting to run 'bin/%s %s' in a new container." % (customer_app_name, ' '.join(cmd)))
         load_profile()
         maybe_use_default_vm_args()
-        ps = distillery_command(customer_app_name, cmd)
+        ps = distillery_command(customer_app_name, cmd, logplex_token, repo, hostname)
         pipe_to_log_shuttle(ps, cmd, logplex_token, repo, hostname)
         ps.wait()
 
@@ -205,6 +205,7 @@ def run(ctx, cmd):
     ip = load_env_var('MY_POD_IP')
     def exec_fn(logplex_token, customer_app_name, repo, hostname):
         if is_distillery(customer_app_name):
+            maybe_use_default_vm_args()
             distillery_command_exec(customer_app_name, cmd)
         else:
             shell_command_exec(cmd, ip, logplex_token, repo, hostname)
@@ -266,7 +267,7 @@ def upgrade(ctx, version):
         log(logplex_token, repo, hostname, "Attempting to upgrade '%s' on host '%s'\n" % (repo, hostname))
         cmd = ('upgrade', mix_version)
         maybe_use_default_vm_args()
-        ps = distillery_command(customer_app_name, cmd)
+        ps = distillery_command(customer_app_name, cmd, logplex_token, repo, hostname)
         pipe_to_log_shuttle(ps, cmd, logplex_token, repo, hostname)
         ps.wait()
 
@@ -369,9 +370,9 @@ def foreman_start(customer_app_name, cmd):
     # it the current dir.
     return subprocess.Popen(['foreman', 'start', '-d', '.', '--color', '--no-timestamp', '-f', procfile_path(os.getcwd())], stdout=subprocess.PIPE)
 
-def distillery_command(customer_app_name, cmd):
+def distillery_command(customer_app_name, cmd, logplex_token, appname, hostname):
     app_path = '/app/bin/%s' % customer_app_name
-    return subprocess.Popen([app_path] + list(cmd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    return shell_command([app_path] + list(cmd), logplex_token, appname, hostname)
 
 def distillery_command_exec(customer_app_name, cmd):
     app_path = '/app/bin/%s' % customer_app_name

@@ -618,6 +618,7 @@ def test_run_distillery_remote_console(mock_tarfile, mock_os, mock_subprocess, m
             'FOO': '1\n2', 
             # 'PORT': '4000', 
             # 'LOGPLEX_TOKEN': '', 
+            'VMARGS_PATH': '/release-config/vm.args'
         }
 
         assert mock_tarfile.mock_calls == [
@@ -638,6 +639,7 @@ def test_run_distillery_remote_console(mock_tarfile, mock_os, mock_subprocess, m
         ] + IS_DISTILLERY_TRUE + [
         ] + ENTER_APP_FOLDER + [
         ] + IS_DISTILLERY_TRUE + [
+        ] + GENERATE_VMARGS + [
             mock.call.execv('/app/bin/fake-customer-app-name', ['/app/bin/fake-customer-app-name', 'remote_console']),
         ] + EXIT_APP_FOLDER + [
         ]
@@ -659,8 +661,8 @@ def test_run_distillery_remote_console(mock_tarfile, mock_os, mock_subprocess, m
             mock.call('/kube-env-vars/ERLANG_COOKIE', 'r'),
             # generate_vmargs not needed for remote_console
             # mock.call(<MagicMock name='os.path.join()' id='139897244298064'>, 'r'),
-            # mock.call(mock.ANY, 'r'),
-            # mock.call('/release-config/vm.args', 'w')
+            mock.call(mock.ANY, 'r'),
+            mock.call('/release-config/vm.args', 'w')
         ]
 
 @mock.patch('gigalixir_run.open', side_effect=mocked_open_fn("my_app"))
