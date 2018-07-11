@@ -148,6 +148,8 @@ def maybe_start_epmd():
     if epmd_path:
         os.symlink(epmd_path, '/usr/local/bin/epmd')
 
+# DEPRECATED: we just use job now and require the user to pass in bin/app command <mod> <fun>
+# used by the old gigalixir run that won't be available soon. delete this once giglaixir run is changed.
 @cli.command()
 @click.argument('cmd', nargs=-1)
 @click.pass_context
@@ -161,6 +163,9 @@ def distillery_job(ctx, cmd):
 
     download_file(slug_url, "/app/%s.tar.gz" % customer_app_name)
     extract_file('/app', '%s.tar.gz' % customer_app_name)
+
+    if not is_distillery(customer_app_name):
+        raise Exception("This can only be done on a distillery release.")
 
     def exec_fn(logplex_token, customer_app_name, repo, hostname):
         log(logplex_token, repo, hostname, "Attempting to run 'bin/%s %s' in a new container." % (customer_app_name, ' '.join(cmd)))
@@ -182,6 +187,23 @@ def shell(ctx, cmd):
     ip = load_env_var('MY_POD_IP')
     def exec_fn(logplex_token, customer_app_name, repo, hostname):
         shell_command_exec(cmd, ip, logplex_token, repo, hostname)
+    launch(ctx, exec_fn, repo, app_key, ip=ip)
+
+@cli.command()
+@click.argument('cmd')
+@click.pass_context
+@report_errors
+def distillery_eval(ctx, cmd):
+    customer_app_name = load_env_var('APP')
+    if not is_distillery(customer_app_name):
+        raise Exception("This can only be done on a distillery release.")
+
+    repo = load_env_var('REPO')
+    app_key = load_env_var('APP_KEY')
+    ip = load_env_var('MY_POD_IP')
+    def exec_fn(logplex_token, customer_app_name, repo, hostname):
+        maybe_use_default_vm_args()
+        distillery_command_exec(customer_app_name, ["eval", cmd])
     launch(ctx, exec_fn, repo, app_key, ip=ip)
 
 @cli.command()
@@ -216,12 +238,22 @@ def job(ctx, cmd):
     def exec_fn(logplex_token, customer_app_name, repo, hostname):
         log(logplex_token, repo, hostname, "Attempting to run '%s' in a new container." % (' '.join(cmd)))
         load_profile()
+        if is_distillery(customer_app_name):
+            maybe_use_default_vm_args()
         ps = shell_command(cmd, logplex_token, repo, hostname)
         pipe_to_log_shuttle(ps, cmd, logplex_token, repo, hostname)
         ps.wait()
 
     launch(ctx, exec_fn, repo, app_key, release=release)
 
+# DEPRECATED: this does too much and does different things depending on mix vs distillery. 
+# it is used by the old gigalixir remote_console, gigalixir ssh <cmd>, gigalixir distillery <cmd>
+# gigalixir observer's eval for cookie and node name, gigalixir migrate uses eval
+# 
+# we are moving remote_console over to a dedicated command.
+# we are moving ssh to not use gigalixir_run at all
+# we are removing distillery completely
+# we are moving eval over to it's own command
 @cli.command()
 @click.argument('cmd', nargs=-1)
 @click.pass_context
@@ -277,6 +309,9 @@ def upgrade(ctx, version):
     slug_url = release["slug_url"]
     config = release["config"]
     customer_app_name = release["customer_app_name"]
+
+    if not is_distillery(customer_app_name):
+        raise Exception("This can only be done on a distillery release.")
 
     # get mix version from slug url. 
     # TODO: make this explicit in the database.

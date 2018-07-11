@@ -708,6 +708,7 @@ def test_upgrade(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
             mock.call.path.exists().__nonzero__(),
             mock.call.path.exists('/kube-env-vars/APP_KEY'),
             mock.call.path.exists().__nonzero__(),
+        ] + IS_DISTILLERY_TRUE + [
             mock.call.path.exists('/app/releases/0.0.2'),
             mock.call.path.exists().__nonzero__(),
             # enter release folder
@@ -919,6 +920,7 @@ def test_mix_job(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
         ] + IS_DISTILLERY_FALSE + [
         ] + ENTER_APP_FOLDER + [
         ] + LOG_MESSAGE + [
+        ] + IS_DISTILLERY_FALSE + [
         ] + EXIT_APP_FOLDER + [
         ]
 
@@ -1006,6 +1008,7 @@ def test_distillery_job(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_o
 
         assert mock_os.mock_calls == [
         ] + EXTRACT_FILE + [
+        ] + IS_DISTILLERY_TRUE + [
         ] + IS_DISTILLERY_TRUE + [
         ] + ENTER_APP_FOLDER + [
         ] + LOG_MESSAGE + [
