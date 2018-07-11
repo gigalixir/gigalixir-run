@@ -176,6 +176,33 @@ def distillery_job(ctx, cmd):
 @click.argument('cmd', nargs=-1)
 @click.pass_context
 @report_errors
+def shell(ctx, cmd):
+    repo = load_env_var('REPO')
+    app_key = load_env_var('APP_KEY')
+    ip = load_env_var('MY_POD_IP')
+    def exec_fn(logplex_token, customer_app_name, repo, hostname):
+        shell_command_exec(cmd, ip, logplex_token, repo, hostname)
+    launch(ctx, exec_fn, repo, app_key, ip=ip)
+
+@cli.command()
+@click.pass_context
+@report_errors
+def remote_console(ctx):
+    repo = load_env_var('REPO')
+    app_key = load_env_var('APP_KEY')
+    ip = load_env_var('MY_POD_IP')
+    def exec_fn(logplex_token, customer_app_name, repo, hostname):
+        if is_distillery(customer_app_name):
+            maybe_use_default_vm_args()
+            distillery_command_exec(customer_app_name, ["remote_console"])
+        else:
+            os.execvp('iex', ['iex', '--name', 'remsh@%s' % ip, '--cookie', os.environ['MY_COOKIE'], '--remsh', os.environ['MY_NODE_NAME']])
+    launch(ctx, exec_fn, repo, app_key, ip=ip)
+
+@cli.command()
+@click.argument('cmd', nargs=-1)
+@click.pass_context
+@report_errors
 def job(ctx, cmd):
     repo = load_env_var('REPO')
     app_key = load_env_var('APP_KEY')
