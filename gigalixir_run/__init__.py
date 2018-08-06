@@ -483,8 +483,10 @@ def load_profile():
 # from https://stackoverflow.com/a/7198338/365377
 def source(script):
     source = 'source %s' % script
+    activate = 'source /tmp/gigalixir/bin/activate'
+    deactivate = 'deactivate'
     dump = '/usr/bin/python -c "import os, json;print json.dumps(dict(os.environ))"'
-    pipe = subprocess.Popen(['/bin/bash', '-c', '%s && %s' %(source,dump)], stdout=subprocess.PIPE)
+    pipe = subprocess.Popen(['/bin/bash', '-c', '%s && %s && %s && %s' %(source,activate,dump,deactivate)], stdout=subprocess.PIPE)
     env = json.loads(pipe.stdout.read())
     os.environ.update(env)
     return env

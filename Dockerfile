@@ -9,6 +9,7 @@ RUN dpkg -i dumb-init_*.deb
 # from setup.py fails with: No package 'libffi' found
 # but works here.
 RUN pip install pyOpenSSL
+RUN pip install virtualenv
 RUN gem install foreman
 
 # Port is always 4000 for no good reason.
@@ -21,6 +22,8 @@ RUN mkdir -p /app
 RUN sed -i 's$root:x:0:0:root:/root:/bin/bash$root:x:0:0:root:/app:/bin/bash$' /etc/passwd
 RUN mkdir -p /opt/gigalixir
 RUN mkdir -p /release-config
+RUN virtualenv /tmp/gigalixir
+RUN chmod og+x /tmp/gigalixir/bin/activate
 COPY etc/ssh/sshd_config /etc/ssh/sshd_config
 COPY bashrc /app/.bashrc
 RUN cp /root/.profile /app/.profile
