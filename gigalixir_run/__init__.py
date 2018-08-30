@@ -186,6 +186,8 @@ def shell(ctx, cmd):
     app_key = load_env_var('APP_KEY')
     ip = load_env_var('MY_POD_IP')
     def exec_fn(logplex_token, customer_app_name, repo, hostname):
+        if is_distillery(customer_app_name):
+            maybe_use_default_vm_args()
         shell_command_exec(cmd, ip, logplex_token, repo, hostname)
     launch(ctx, exec_fn, repo, app_key, ip=ip)
 
