@@ -205,7 +205,29 @@ def distillery_eval(ctx, cmd):
     ip = load_env_var('MY_POD_IP')
     def exec_fn(logplex_token, customer_app_name, repo, hostname):
         maybe_use_default_vm_args()
-        distillery_command_exec(customer_app_name, ["eval", cmd])
+        # we choose eval or rpc depending on if we are running distillery 2.0 or not.
+        # really, we check the capabilities of the release. if distillery.eval == elixir then
+        # we use rpc. eval does not run on the existing node. it tries to spin up a new "minimal" node
+        # which does not seem to have the repo running. this means that migrations don't work, the cookie
+        # and node name are potentially incorrect.
+        #
+        # current_release *could* be wrong. if you deployed, but this is run on an old container before it
+        # is terminated.
+        release = current_release(ctx.obj['host'], repo, app_key)
+        capabilities = release.get("capabilities")
+        eval_language = "erlang"
+        # some kind of monad usable here?
+        if capabilities:
+            dist = capabilities.get("distillery")
+            if dist:
+                eval_language = dist.get("eval")
+        
+        if eval_language == "elixir":
+            eval_command = "rpc"
+        else:
+            eval_command = "eval"
+
+        distillery_command_exec(customer_app_name, [eval_command, cmd])
     launch(ctx, exec_fn, repo, app_key, ip=ip)
 
 @cli.command()
