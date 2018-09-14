@@ -119,7 +119,27 @@ def mocked_requests_get(*args, **kwargs):
                 "DATABASE_URL": "fake-database-url",
                 "FOO": """1
 2"""
-            }
+            },
+            "capabilities": {
+                "distillery": {
+                    "eval": "erlang"
+                }
+            },
+        }}, 200)
+    elif args[0] == 'https://api.gigalixir.com/api/apps/distillery_2/releases/current':
+        return MockResponse({"data": {
+            "slug_url": "https://storage.googleapis.com/slug-bucket/production/sunny-wellgroomed-africanpiedkingfisher/releases/0.0.2/SHA/gigalixir_getting_started.tar.gz",
+            "customer_app_name": "fake-customer-app-name",
+            "config": {
+                "DATABASE_URL": "fake-database-url",
+                "FOO": """1
+2"""
+            },
+            "capabilities": {
+                "distillery": {
+                    "eval": "elixir"
+                }
+            },
         }}, 200)
     elif args[0] == 'https://api.gigalixir.com/api/apps/my_custom_vmargs_app/releases/current':
         return MockResponse({"data": {
@@ -1042,4 +1062,194 @@ def test_distillery_job(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_o
             # mock.call(<MagicMock name='os.path.join()' id='139897244298064'>, 'r'),
             mock.call(mock.ANY, 'r'),
             mock.call('/release-config/vm.args', 'w'),
+        ]
+
+@mock.patch('gigalixir_run.open', side_effect=mocked_open_fn("my_app"))
+@mock.patch('requests.get', side_effect=mocked_requests_get)
+@mock.patch('gigalixir_run.subprocess')
+@mock.patch('gigalixir_run.os')
+@mock.patch('tarfile.open')
+@httpretty.activate
+def test_distillery_eval(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
+    mock_os.path.isfile.return_value = True
+    stdin = mock.Mock(name='stdin')
+    mock_subprocess.PIPE = stdin
+
+    pipe_read = mock.Mock(name='pipe_read')
+    pipe_write = mock.Mock(name='pipe_write')
+    mock_os.pipe.return_value = (pipe_read, pipe_write)
+
+    # use a real dictionary for environ
+    my_env = dict()
+    mock_os.environ = my_env
+    mock_os.X_OK = os.X_OK
+
+    runner = CliRunner()
+    # Make sure this test does not modify the user's netrc file.
+    with runner.isolated_filesystem():
+        os.environ['HOME'] = '.'
+
+        result = runner.invoke(gigalixir_run.cli, ['distillery_eval', 'node().'])
+
+        assert result.output == ''
+        assert result.exit_code == 0
+        assert my_env == {
+            'GIGALIXIR_DEFAULT_VMARGS': 'true', 
+            'REPLACE_OS_VARS': 'true', 
+            'RELX_REPLACE_OS_VARS': 'true', 
+            'LIBCLUSTER_KUBERNETES_NODE_BASENAME': 'my_app', 
+            'LIBCLUSTER_KUBERNETES_SELECTOR': 'repo=my_app', 
+            # 'MY_POD_IP': '1.2.3.4', 
+            'DATABASE_URL': 'fake-database-url', 
+            'MY_COOKIE': 'fake-cookie', 
+            'MY_NODE_NAME': 'my_app@1.2.3.4', 
+            # 'ERLANG_COOKIE': 'fake-cookie', 
+            'LC_ALL': 'en_US.UTF-8', 
+            'FOO': '1\n2', 
+            # 'PORT': '4000', 
+            # 'LOGPLEX_TOKEN': '', 
+            'VMARGS_PATH': '/release-config/vm.args'
+        }
+
+        assert mock_tarfile.mock_calls == [
+        ]
+
+        assert mock_os.mock_calls == [
+            # load_env_var REPO
+            mock.call.path.exists('/kube-env-vars/APP'),
+            mock.call.path.exists().__nonzero__(),
+        ] + IS_DISTILLERY_TRUE + [
+            mock.call.path.exists('/kube-env-vars/REPO'),
+            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists('/kube-env-vars/APP_KEY'),
+            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists('/kube-env-vars/MY_POD_IP'),
+            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists('/kube-env-vars/LOGPLEX_TOKEN'),
+            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists('/kube-env-vars/ERLANG_COOKIE'),
+            mock.call.path.exists().__nonzero__(),
+        ] + IS_DISTILLERY_TRUE + [
+        ] + ENTER_APP_FOLDER + [
+        ] + GENERATE_VMARGS + [
+            mock.call.execv('/app/bin/fake-customer-app-name', ['/app/bin/fake-customer-app-name', 'eval', 'node().']),
+        ] + EXIT_APP_FOLDER + [
+        ]
+
+        assert mock_subprocess.mock_calls == [
+           mock.call.check_output(['hostname']),
+           mock.call.check_output().strip(),
+        ]
+
+        assert mock_get.mock_calls == [
+            mock.call(u'https://api.gigalixir.com/api/apps/my_app/releases/current', auth=(u'my_app', u'fake-app-key')),
+            mock.call(u'https://api.gigalixir.com/api/apps/my_app/releases/current', auth=(u'my_app', u'fake-app-key')),
+        ]
+
+        assert mock_open.mock_calls == [
+            mock.call('/kube-env-vars/APP', 'r'),
+            mock.call('/kube-env-vars/REPO', 'r'),
+            mock.call('/kube-env-vars/APP_KEY', 'r'),
+            mock.call('/kube-env-vars/MY_POD_IP', 'r'),
+            mock.call('/kube-env-vars/LOGPLEX_TOKEN', 'r'),
+            mock.call('/kube-env-vars/ERLANG_COOKIE', 'r'),
+            # generate_vmargs not needed for remote_console
+            # mock.call(<MagicMock name='os.path.join()' id='139897244298064'>, 'r'),
+            mock.call(mock.ANY, 'r'),
+            mock.call('/release-config/vm.args', 'w')
+        ]
+
+@mock.patch('gigalixir_run.open', side_effect=mocked_open_fn("distillery_2"))
+@mock.patch('requests.get', side_effect=mocked_requests_get)
+@mock.patch('gigalixir_run.subprocess')
+@mock.patch('gigalixir_run.os')
+@mock.patch('tarfile.open')
+@httpretty.activate
+def test_distillery_2_eval(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
+    mock_os.path.isfile.return_value = True
+    stdin = mock.Mock(name='stdin')
+    mock_subprocess.PIPE = stdin
+
+    pipe_read = mock.Mock(name='pipe_read')
+    pipe_write = mock.Mock(name='pipe_write')
+    mock_os.pipe.return_value = (pipe_read, pipe_write)
+
+    # use a real dictionary for environ
+    my_env = dict()
+    mock_os.environ = my_env
+    mock_os.X_OK = os.X_OK
+
+    runner = CliRunner()
+    # Make sure this test does not modify the user's netrc file.
+    with runner.isolated_filesystem():
+        os.environ['HOME'] = '.'
+
+        result = runner.invoke(gigalixir_run.cli, ['distillery_eval', 'IO.inspect 123'])
+
+        assert result.output == ''
+        assert result.exit_code == 0
+        assert my_env == {
+            'GIGALIXIR_DEFAULT_VMARGS': 'true', 
+            'REPLACE_OS_VARS': 'true', 
+            'RELX_REPLACE_OS_VARS': 'true', 
+            'LIBCLUSTER_KUBERNETES_NODE_BASENAME': 'distillery_2', 
+            'LIBCLUSTER_KUBERNETES_SELECTOR': 'repo=distillery_2', 
+            # 'MY_POD_IP': '1.2.3.4', 
+            'DATABASE_URL': 'fake-database-url', 
+            'MY_COOKIE': 'fake-cookie', 
+            'MY_NODE_NAME': 'distillery_2@1.2.3.4', 
+            # 'ERLANG_COOKIE': 'fake-cookie', 
+            'LC_ALL': 'en_US.UTF-8', 
+            'FOO': '1\n2', 
+            # 'PORT': '4000', 
+            # 'LOGPLEX_TOKEN': '', 
+            'VMARGS_PATH': '/release-config/vm.args'
+        }
+
+        assert mock_tarfile.mock_calls == [
+        ]
+
+        assert mock_os.mock_calls == [
+            # load_env_var REPO
+            mock.call.path.exists('/kube-env-vars/APP'),
+            mock.call.path.exists().__nonzero__(),
+        ] + IS_DISTILLERY_TRUE + [
+            mock.call.path.exists('/kube-env-vars/REPO'),
+            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists('/kube-env-vars/APP_KEY'),
+            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists('/kube-env-vars/MY_POD_IP'),
+            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists('/kube-env-vars/LOGPLEX_TOKEN'),
+            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists('/kube-env-vars/ERLANG_COOKIE'),
+            mock.call.path.exists().__nonzero__(),
+        ] + IS_DISTILLERY_TRUE + [
+        ] + ENTER_APP_FOLDER + [
+        ] + GENERATE_VMARGS + [
+            mock.call.execv('/app/bin/fake-customer-app-name', ['/app/bin/fake-customer-app-name', 'rpc', 'IO.inspect 123']),
+        ] + EXIT_APP_FOLDER + [
+        ]
+
+        assert mock_subprocess.mock_calls == [
+           mock.call.check_output(['hostname']),
+           mock.call.check_output().strip(),
+        ]
+
+        assert mock_get.mock_calls == [
+            mock.call(u'https://api.gigalixir.com/api/apps/distillery_2/releases/current', auth=(u'distillery_2', u'fake-app-key')),
+            mock.call(u'https://api.gigalixir.com/api/apps/distillery_2/releases/current', auth=(u'distillery_2', u'fake-app-key')),
+        ]
+
+        assert mock_open.mock_calls == [
+            mock.call('/kube-env-vars/APP', 'r'),
+            mock.call('/kube-env-vars/REPO', 'r'),
+            mock.call('/kube-env-vars/APP_KEY', 'r'),
+            mock.call('/kube-env-vars/MY_POD_IP', 'r'),
+            mock.call('/kube-env-vars/LOGPLEX_TOKEN', 'r'),
+            mock.call('/kube-env-vars/ERLANG_COOKIE', 'r'),
+            # generate_vmargs not needed for remote_console
+            # mock.call(<MagicMock name='os.path.join()' id='139897244298064'>, 'r'),
+            mock.call(mock.ANY, 'r'),
+            mock.call('/release-config/vm.args', 'w')
         ]
