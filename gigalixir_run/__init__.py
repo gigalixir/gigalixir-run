@@ -49,6 +49,8 @@ urllib3.contrib.pyopenssl.inject_into_urllib3()
 # distillery_job  True        False        True          first pass
 # bootstrap       N/A         N/A          N/A, but True
 
+MUST_USE_DISTILLERY_MSG = "This can only be done on a distillery release. See https://gigalixir.readthedocs.io/en/latest/main.html#mix-vs-distillery"
+
 @click.group()
 @click.option('--env', envvar='GIGALIXIR_ENV', default='prod', help="GIGALIXIR environment [prod, dev].")
 @click.pass_context
@@ -165,7 +167,7 @@ def distillery_job(ctx, cmd):
     extract_file('/app', '%s.tar.gz' % customer_app_name)
 
     if not is_distillery(customer_app_name):
-        raise Exception("This can only be done on a distillery release.")
+        raise Exception(MUST_USE_DISTILLERY_MSG)
 
     def exec_fn(logplex_token, customer_app_name, repo, hostname):
         log(logplex_token, repo, hostname, "Attempting to run 'bin/%s %s' in a new container." % (customer_app_name, ' '.join(cmd)))
@@ -198,37 +200,78 @@ def shell(ctx, cmd):
 def distillery_eval(ctx, cmd):
     customer_app_name = load_env_var('APP')
     if not is_distillery(customer_app_name):
-        raise Exception("This can only be done on a distillery release.")
+        raise Exception(MUST_USE_DISTILLERY_MSG)
 
     repo = load_env_var('REPO')
     app_key = load_env_var('APP_KEY')
     ip = load_env_var('MY_POD_IP')
     def exec_fn(logplex_token, customer_app_name, repo, hostname):
         maybe_use_default_vm_args()
-        # we choose eval or rpc depending on if we are running distillery 2.0 or not.
-        # really, we check the capabilities of the release. if distillery.eval == elixir then
-        # we use rpc. eval does not run on the existing node. it tries to spin up a new "minimal" node
-        # which does not seem to have the repo running. this means that migrations don't work, the cookie
-        # and node name are potentially incorrect.
-        #
-        # current_release *could* be wrong. if you deployed, but this is run on an old container before it
-        # is terminated.
-        release = current_release(ctx.obj['host'], repo, app_key)
-        capabilities = release.get("capabilities")
-        eval_language = "erlang"
-        # some kind of monad usable here?
-        if capabilities:
-            dist = capabilities.get("distillery")
-            if dist:
-                eval_language = dist.get("eval")
-        
-        if eval_language == "elixir":
-            eval_command = "rpc"
-        else:
-            eval_command = "eval"
-
+        eval_command = detect_eval_command(ctx, repo, app_key)
         distillery_command_exec(customer_app_name, [eval_command, cmd])
     launch(ctx, exec_fn, repo, app_key, ip=ip)
+
+def detect_eval_command(ctx, repo, app_key):
+    # we choose eval or rpc depending on if we are running distillery 2.0 or not.
+    # really, we check the capabilities of the release. if distillery.eval == elixir then
+    # we use rpc. eval does not run on the existing node. it tries to spin up a new "minimal" node
+    # which does not seem to have the repo running. this means that migrations don't work, the cookie
+    # and node name are potentially incorrect.
+    #
+    # current_release *could* be wrong. if you deployed, but this is run on an old container before it
+    # is terminated.
+    release = current_release(ctx.obj['host'], repo, app_key)
+    capabilities = release.get("capabilities")
+    eval_language = "erlang"
+    # some kind of monad usable here?
+    if capabilities:
+        dist = capabilities.get("distillery")
+        if dist:
+            eval_language = dist.get("eval")
+    
+    if eval_language == "elixir":
+        eval_command = "rpc"
+    else:
+        eval_command = "eval"
+    return eval_command
+
+# WIP
+# @cli.command()
+# @click.option('-m', '--migration_app_name', default=None, help='For umbrella apps, specify which inner app to migrate.')
+# @click.pass_context
+# @report_errors
+# def migrate(ctx):
+#     repo = load_env_var('REPO')
+#     app_key = load_env_var('APP_KEY')
+#     ip = load_env_var('MY_POD_IP')
+#     def exec_fn(logplex_token, customer_app_name, repo, hostname):
+#         if is_distillery(customer_app_name):
+#             maybe_use_default_vm_args()
+#             migrate_command = get_migrate_command(ctx.obj['host'], repo, migration_app_name)
+#             eval_command = detect_eval_command(ctx, repo, app_key)
+#             distillery_command_exec(customer_app_name, [migrate_command, cmd])
+#         else:
+#             # TODO: migration app name?
+#             cmd = ['mix', 'ecto.migrate']
+#             shell_command_exec(cmd, ip, logplex_token, repo, hostname)
+#     launch(ctx, exec_fn, repo, app_key, ip=ip)
+
+def get_migrate_command(host, app_name, migration_app_name):
+    if migration_app_name == None:
+        r = requests.get('%s/api/apps/%s/migrate-command' % (host, quote(app_name.encode('utf-8'))), headers = {
+            'Content-Type': 'application/json',
+        })
+    else:
+        r = requests.get('%s/api/apps/%s/migrate-command?migration_app_name=%s' % (host, quote(app_name.encode('utf-8')), quote(migration_app_name.encode('utf-8'))), headers = {
+            'Content-Type': 'application/json',
+        })
+    if r.status_code != 200:
+        if r.status_code == 401:
+            raise auth.AuthException()
+        raise Exception(r.text)
+    else:
+        command = json.loads(r.text)["data"]
+        return command
 
 @cli.command()
 @click.pass_context
@@ -335,7 +378,7 @@ def upgrade(ctx, version):
     customer_app_name = release["customer_app_name"]
 
     if not is_distillery(customer_app_name):
-        raise Exception("This can only be done on a distillery release.")
+        raise Exception(MUST_USE_DISTILLERY_MSG)
 
     # get mix version from slug url. 
     # TODO: make this explicit in the database.
@@ -363,8 +406,7 @@ def upgrade(ctx, version):
 def load_configs(release):
     config = release["config"]
     os.environ['LC_ALL'] = "en_US.UTF-8"
-    for key, value in config.iteritems():
-        os.environ[key] = value
+    os.environ.update(encode_dict(config, 'utf-8'))
 
 # is this really needed? all it does it load up env vars
 def launch(ctx, exec_fn, repo, app_key, ip=None, release=None):
@@ -473,6 +515,7 @@ def shell_command(cmd, logplex_token, appname, hostname):
         raise
 
 def shell_command_exec(cmd, ip, logplex_token, appname, hostname):
+    # TODO: extract this out, it doesn't belong here.
     if list(cmd) == ['remote_console']:
         # iex_path = distutils.spawn.find_executable('iex')
         os.execvp('iex', ['iex', '--name', 'remsh@%s' % ip, '--cookie', os.environ['MY_COOKIE'], '--remsh', os.environ['MY_NODE_NAME']])
@@ -504,6 +547,15 @@ def load_profile():
     for f in glob.glob("/app/.profile.d/*.sh"):
         source(f)
 
+def encode_dict(d, encoding):
+    """assumes all keys and values are unicode values (python2)"""
+    ret = {}
+    for key, value in d.iteritems():
+        k = key.encode(encoding)
+        v = value.encode(encoding)
+        ret[k] = v
+    return ret
+
 # from https://stackoverflow.com/a/7198338/365377
 def source(script):
     source = 'source %s' % script
@@ -511,8 +563,10 @@ def source(script):
     deactivate = 'deactivate'
     dump = '/usr/bin/python -c "import os, json;print json.dumps(dict(os.environ))"'
     pipe = subprocess.Popen(['/bin/bash', '-c', '%s && %s && %s && %s' %(source,activate,dump,deactivate)], stdout=subprocess.PIPE)
-    env = json.loads(pipe.stdout.read())
-    os.environ.update(env)
+    out = pipe.stdout.read().decode('utf-8')
+    env = json.loads(out)
+    # convert all of env to properly encoded strs for update operation
+    os.environ.update(encode_dict(env, 'utf-8'))
     return env
 
 def log(logplex_token, appname, hostname, line):
@@ -591,6 +645,7 @@ def get_hostname():
     return subprocess.check_output(["hostname"]).strip()
 
 def load_env_var(name):
+    name = name.encode('utf-8')
     if name in os.environ:
         return os.environ[name]
     else:
