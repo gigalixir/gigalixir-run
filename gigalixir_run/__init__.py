@@ -15,6 +15,7 @@ import urllib3.contrib.pyopenssl
 import signal
 import pystache
 import distutils.spawn
+from six.moves.urllib.parse import quote
 urllib3.contrib.pyopenssl.inject_into_urllib3()
 
 # how is launch used?
@@ -107,6 +108,9 @@ def init(ctx, repo, cmd, app_key, logplex_token, erlang_cookie, ip):
 
     def exec_fn(logplex_token, customer_app_name, repo, hostname):
         log_start_and_stop_web(logplex_token, repo, hostname)
+        # should we load_profile for all commands even though .bashrc loads it already?
+        # it's needed here beacuse we don't run init inisde of bash, but does it hurt to just
+        # load it everywhere?
         load_profile()
         if is_distillery(customer_app_name):
             maybe_use_default_vm_args()
@@ -171,6 +175,9 @@ def distillery_job(ctx, cmd):
 
     def exec_fn(logplex_token, customer_app_name, repo, hostname):
         log(logplex_token, repo, hostname, "Attempting to run 'bin/%s %s' in a new container." % (customer_app_name, ' '.join(cmd)))
+        # should we load_profile for all commands even though .bashrc loads it already?
+        # it's needed here beacuse we don't run distillery_job inisde of bash, but does it hurt to just
+        # load it everywhere?
         load_profile()
         maybe_use_default_vm_args()
         ps = distillery_command(customer_app_name, cmd, logplex_token, repo, hostname)
@@ -235,40 +242,38 @@ def detect_eval_command(ctx, repo, app_key):
         eval_command = "eval"
     return eval_command
 
-# WIP
-# @cli.command()
-# @click.option('-m', '--migration_app_name', default=None, help='For umbrella apps, specify which inner app to migrate.')
-# @click.pass_context
-# @report_errors
-# def migrate(ctx):
-#     repo = load_env_var('REPO')
-#     app_key = load_env_var('APP_KEY')
-#     ip = load_env_var('MY_POD_IP')
-#     def exec_fn(logplex_token, customer_app_name, repo, hostname):
-#         if is_distillery(customer_app_name):
-#             maybe_use_default_vm_args()
-#             migrate_command = get_migrate_command(ctx.obj['host'], repo, migration_app_name)
-#             eval_command = detect_eval_command(ctx, repo, app_key)
-#             distillery_command_exec(customer_app_name, [migrate_command, cmd])
-#         else:
-#             # TODO: migration app name?
-#             cmd = ['mix', 'ecto.migrate']
-#             shell_command_exec(cmd, ip, logplex_token, repo, hostname)
-#     launch(ctx, exec_fn, repo, app_key, ip=ip)
+@cli.command()
+@click.option('-m', '--migration_app_name', default=None, help='For umbrella apps, specify which inner app to migrate.')
+@click.pass_context
+@report_errors
+def migrate(ctx, migration_app_name):
+    repo = load_env_var('REPO')
+    app_key = load_env_var('APP_KEY')
+    ip = load_env_var('MY_POD_IP')
+    def exec_fn(logplex_token, customer_app_name, repo, hostname):
+        if is_distillery(customer_app_name):
+            maybe_use_default_vm_args()
+            migrate_command = get_migrate_command(ctx.obj['host'], repo, app_key, migration_app_name)
+            eval_command = detect_eval_command(ctx, repo, app_key)
+            distillery_command_exec(customer_app_name, [eval_command, migrate_command])
+        else:
+            # migration app name not used here. mix ecto.migrate migrates all apps in an umbrella
+            cmd = ['mix', 'ecto.migrate']
+            shell_command_exec(cmd, ip, logplex_token, repo, hostname)
+    launch(ctx, exec_fn, repo, app_key, ip=ip)
 
-def get_migrate_command(host, app_name, migration_app_name):
+def get_migrate_command(host, repo, app_key, migration_app_name):
     if migration_app_name == None:
-        r = requests.get('%s/api/apps/%s/migrate-command' % (host, quote(app_name.encode('utf-8'))), headers = {
+        # TODO: do we need to quote(repo.encode('utf-8')) at all?
+        r = requests.get("%s/api/apps/%s/releases/migrate-command" % (host, repo), auth = (repo, app_key), headers = {
             'Content-Type': 'application/json',
-        })
+        }) 
     else:
-        r = requests.get('%s/api/apps/%s/migrate-command?migration_app_name=%s' % (host, quote(app_name.encode('utf-8')), quote(migration_app_name.encode('utf-8'))), headers = {
+        r = requests.get("%s/api/apps/%s/releases/migrate-command?migration_app_name=%s" % (host, repo, quote(migration_app_name.encode('utf-8'))), auth = (repo, app_key), headers = {
             'Content-Type': 'application/json',
-        })
+        }) 
     if r.status_code != 200:
-        if r.status_code == 401:
-            raise auth.AuthException()
-        raise Exception(r.text)
+        raise Exception(r)
     else:
         command = json.loads(r.text)["data"]
         return command
@@ -304,6 +309,9 @@ def job(ctx, cmd):
 
     def exec_fn(logplex_token, customer_app_name, repo, hostname):
         log(logplex_token, repo, hostname, "Attempting to run '%s' in a new container." % (' '.join(cmd)))
+        # should we load_profile for all commands even though .bashrc loads it already?
+        # it's needed here beacuse we don't run job inisde of bash, but does it hurt to just
+        # load it everywhere?
         load_profile()
         if is_distillery(customer_app_name):
             maybe_use_default_vm_args()

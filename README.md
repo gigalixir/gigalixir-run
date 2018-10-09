@@ -20,6 +20,7 @@ docker run --rm -P -e APP_KEY=$APP_KEY -e MY_POD_IP=127.0.0.1 -e ERLANG_COOKIE=1
 ```
 
 # then exec into the container and run
+docker exec -it $(docker ps | awk '/gigalixir-run/ { print $1 }') /bin/bash
 
 ```
 gigalixir_run run -- remote_console 
@@ -36,6 +37,7 @@ docker run --rm -P -e APP_KEY=$APP_KEY -e MY_POD_IP=127.0.0.1 -e ERLANG_COOKIE=1
 ```
 
 # then exec into the container and run
+docker exec -it $(docker ps | awk '/gigalixir-run/ { print $1 }') /bin/bash
 
 ```
 gigalixir_run run -- remote_console 
@@ -55,6 +57,7 @@ gigalixir_run distillery_eval -- "Ecto.Migrator.run(List.first(Application.get_e
 ```
 
 # then exec into the container and run
+docker exec -it $(docker ps | awk '/gigalixir-run/ { print $1 }') /bin/bash
 
 ```
 gigalixir_run run -- remote_console 
