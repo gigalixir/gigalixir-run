@@ -358,6 +358,81 @@ def generate_vmargs(node_name, cookie):
             g.write(vmargs)
 
 @cli.command()
+@click.argument('repo', nargs=1)
+@click.argument('customer_app_name', nargs=1)
+@click.argument('slug_url', nargs=1)
+@click.argument('cmd', nargs=-1)
+@click.option('--app_key', envvar='APP_KEY', default=None)
+@click.option('--secret_key_base', envvar='SECRET_KEY_BASE', default=None)
+@click.option('--logplex_token', envvar='LOGPLEX_TOKEN', default=None)
+@click.option('--erlang_cookie', envvar='ERLANG_COOKIE', default=None)
+@click.option('--ip', envvar='MY_POD_IP', default=None)
+@click.pass_context
+@report_errors
+def api(ctx, repo, customer_app_name, slug_url, cmd, app_key, secret_key_base, logplex_token, erlang_cookie, ip):
+    """
+    For internal gigalixir use. Used to start the api server without a cyclical dependency (on the api server)
+    Pretty much a copy and paste of init() except with the current_release lines replaced with explicit parameters
+    """
+    # TODO: app_key really isn't needed, but doesn't hurt
+    if app_key == None:
+        raise Exception("APP_KEY not found.")
+
+    # TODO: add this check to init as well?
+    if secret_key_base == None:
+        raise Exception("SECRET_KEY_BASE not found.")
+
+    # pulls ssh keys from api server. make this work?
+    # start_ssh(repo, app_key)
+
+    # used to run the api server without a cyclical dependency
+    # this is extra and isn't done in init() we manage secrets with a k8s secret since api server isn't available
+    # other than configs, the current endpoint also gives us
+    # version: not used yet. we're still pulling the current version from the slug_url which sucks. only used for upgrades
+    # slug_url: passed in as arg
+    # customer_app_name: passed in as arg
+    # created_at: not used
+    # summary: not used
+    # capabilities: used for distillery_eval, migrate, and detect_distillery_eval_command which are used after app is running. not needed for the "init" case which is where we are here
+    # customer_app_version: not used
+    # sha: not used
+    # replicas: not used
+    # cloud: not used
+    # region: not used
+    # secret_key_base: passed in as arg. not really used in this python script, but is required by distillery so it is a required env var, we just check that it exists
+    # erlang_cookie: passed in as arg
+    # logplex_token: passed in as arg
+    # libcluster_kubernetes_selector: not used. we duplicate it in set_distillery_env, not great.
+    # libcluster_kubernetes_node_basename: not used. we duplicate it in set_distillery_env, not great.
+    load_secrets()
+
+    persist_env(repo, customer_app_name, app_key, logplex_token, erlang_cookie, ip)
+
+    download_file(slug_url, "/app/%s.tar.gz" % customer_app_name)
+    extract_file('/app', '%s.tar.gz' % customer_app_name)
+    maybe_start_epmd()
+
+    hostname = get_hostname()
+
+    # iex --remsh uses MY_NODE_NAME and MY_COOKIE
+    os.environ['MY_NODE_NAME'] = "%s@%s" % (repo, ip)
+    os.environ['MY_COOKIE'] = erlang_cookie
+    if is_distillery(customer_app_name):
+        set_distillery_env(repo)
+
+    with cd('/app'):
+        log_start_and_stop_web(logplex_token, repo, hostname)
+        # should we load_profile for all commands even though .bashrc loads it already?
+        # it's needed here beacuse we don't run init inisde of bash, but does it hurt to just
+        # load it everywhere?
+        load_profile()
+        if is_distillery(customer_app_name):
+            maybe_use_default_vm_args()
+        ps = foreman_start(customer_app_name, cmd)
+        pipe_to_log_shuttle(ps, cmd, logplex_token, repo, hostname)
+        ps.wait()
+
+@cli.command()
 @click.argument('customer_app_name', nargs=1)
 @click.argument('slug_url', nargs=1)
 @click.argument('cmd', nargs=-1)
@@ -667,10 +742,24 @@ def load_env_var(name):
             raise Exception("could not find %s in env or in /kube-env-vars" % name)
         else:
             with open(path, 'r') as f:
-                value = f.read()
+                value = f.read() #.decode("utf-8")
             return value
 
 
 def is_distillery(customer_app_name):
     app_path = '/app/bin/%s' % customer_app_name
     return is_exe(app_path)
+
+def load_secrets():
+    mypath = "/mnt/secrets"
+    f = []
+    for (dirpath, dirnames, filenames) in os.walk(mypath):
+        f.extend(filenames)
+        break
+    secrets = {}
+    for key in f:
+        with open("/mnt/secrets/%s" % key, "r") as fh:
+            value = fh.read().decode("utf-8")
+            secrets[key] = value
+    os.environ.update(encode_dict(secrets, 'utf-8'))
+

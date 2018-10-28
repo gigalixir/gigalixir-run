@@ -67,6 +67,12 @@ gigalixir_run run -- remote_console
 
 ```
 docker run --rm -p 4000:4000 -e APP_KEY=$APP_KEY -e MY_POD_IP=127.0.0.1 -e ERLANG_COOKIE=123 -e LOGPLEX_TOKEN=$LOGPLEX_TOKEN -e REPO=bar -e MY_NODE_NAME=bar@127.0.0.1 -e MY_COOKIE=123 -e REPLACE_OS_VARS=true gigalixir-run bootstrap gigalixir_getting_started "REDACTED" foreground
+
+# for api
+
+export SECRET_KEY_BASE=
+export SLUG_URL=
+docker run --rm -p 4000:4000 -e APP_KEY=$APP_KEY -e MY_POD_IP=127.0.0.1 -e ERLANG_COOKIE=123 -e LOGPLEX_TOKEN=$LOGPLEX_TOKEN -e REPO=bar -e SECRET_KEY_BASE=$SECRET_KEY_BASE -e REPLACE_OS_VARS=true gigalixir-run api bar gigalixir_getting_started "$SLUG_URL" foreground
 ```
 
 # Deploy
