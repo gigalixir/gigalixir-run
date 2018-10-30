@@ -382,8 +382,15 @@ def api(ctx, repo, customer_app_name, slug_url, cmd, app_key, secret_key_base, l
     if secret_key_base == None:
         raise Exception("SECRET_KEY_BASE not found.")
 
-    # pulls ssh keys from api server. make this work?
-    # start_ssh(repo, app_key)
+    # copied from start_ssh(repo, app_key), but modified to not pull the keys from the api server
+    # this is just jesse@gigalixir.com's public key for now.
+    # TODO: do this better
+    ssh_config = "/root/.ssh"
+    if not os.path.exists(ssh_config):
+        os.makedirs(ssh_config)
+    update_authorized_keys_cmd = "echo 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQCm9lcyszemJ8qdCIe6cxbYufqvqCnx81lM0UiOYzuInJPwOgjzOAQkV93AMw0nQhqAZvuP9LBDOOjQWq9rbhrT3gGbhpE0XiUD+P/Qm4xF3Xer5V76Ludm/2uw4aaYA7MOrHxh91Js/+/sEvHSeh2Jovpv/3iQPJPflcPPqyLzEUKXAUJ+pQqhV7D09Qr4Gvv/nRIblmfk4wUOVbiy2YhbwUKXtwIi0UpJ+QI0AMznS5Uwq/aWcJ2iokztesJYol4Loh2ony7FofJjeuiSPT83Y0jHZC8gs2WQMi7ekgTyZwxE1NiU0qoNEWln1bTKNyyIhVCPO+gL61i6iaMFvFdZ934QN7mdVSu2CUCpkBxNbTIztbsjs94899ic1Adh9fDH9M4QckCatYC4PVonvKWNKDS3gR6XkXJ3bYY8KhbJ7/yMOgEJEC8akmmX6cHjF6P8g8s10F64vsAH6zyMAOpwo1S/9UPZehtu4eatO+PCIr9y0tcZMujjrAi0XbOp0ciMzb4nk9Usg1vTZ12c3+szwhlJMsk6QZU9C+yt+Cq2rf6ZLAsx1ecZjrxeTNP2S0B5gfEFysEKZEaAXV1wYd4eImSoQW8JUA1Ba7vGgMsj4Jom9GmXqEF9nrGlhl8ERllD7tLGCYs/CcgRqhxNjr8IEktmf1kndtMb6Y1JdWcn8Q== jesse@gigalixir.com' > /root/.ssh/authorized_keys" 
+    subprocess.check_call(['/bin/bash', '-c', update_authorized_keys_cmd])
+    subprocess.check_call(['service', 'ssh', 'start'])
 
     # used to run the api server without a cyclical dependency
     # this is extra and isn't done in init() we manage secrets with a k8s secret since api server isn't available
