@@ -91,34 +91,38 @@ def report_errors(f):
 @click.pass_context
 @report_errors
 def init(ctx, repo, cmd, app_key, logplex_token, erlang_cookie, ip):
-    if app_key == None:
-        raise Exception("APP_KEY not found.")
+    try:
+        if app_key == None:
+            raise Exception("APP_KEY not found.")
 
-    start_ssh(repo, app_key)
+        start_ssh(repo, app_key)
 
-    release = current_release(ctx.obj['host'], repo, app_key)
-    slug_url = release["slug_url"]
-    customer_app_name = release["customer_app_name"]
+        release = current_release(ctx.obj['host'], repo, app_key)
+        slug_url = release["slug_url"]
+        customer_app_name = release["customer_app_name"]
 
-    persist_env(repo, customer_app_name, app_key, logplex_token, erlang_cookie, ip)
+        persist_env(repo, customer_app_name, app_key, logplex_token, erlang_cookie, ip)
 
-    download_file(slug_url, "/app/%s.tar.gz" % customer_app_name)
-    extract_file('/app', '%s.tar.gz' % customer_app_name)
-    maybe_start_epmd()
+        download_file(slug_url, "/app/%s.tar.gz" % customer_app_name)
+        extract_file('/app', '%s.tar.gz' % customer_app_name)
+        maybe_start_epmd()
 
-    def exec_fn(logplex_token, customer_app_name, repo, hostname):
-        log_start_and_stop_web(logplex_token, repo, hostname)
-        # should we load_profile for all commands even though .bashrc loads it already?
-        # it's needed here beacuse we don't run init inisde of bash, but does it hurt to just
-        # load it everywhere?
-        load_profile()
-        if is_distillery(customer_app_name):
-            maybe_use_default_vm_args()
-        ps = foreman_start(customer_app_name, cmd)
-        pipe_to_log_shuttle(ps, cmd, logplex_token, repo, hostname)
-        ps.wait()
+        def exec_fn(logplex_token, customer_app_name, repo, hostname):
+            log_start_and_stop_web(logplex_token, repo, hostname)
+            # should we load_profile for all commands even though .bashrc loads it already?
+            # it's needed here beacuse we don't run init inisde of bash, but does it hurt to just
+            # load it everywhere?
+            load_profile()
+            if is_distillery(customer_app_name):
+                maybe_use_default_vm_args()
+            ps = foreman_start(customer_app_name, cmd)
+            pipe_to_log_shuttle(ps, cmd, logplex_token, repo, hostname)
+            ps.wait()
 
-    launch(ctx, exec_fn, repo, app_key, ip=ip, release=release)
+        launch(ctx, exec_fn, repo, app_key, ip=ip, release=release)
+    except Exception as e:
+        log(logplex_token, repo, "-", e.message)
+        raise 
 
 def persist_env(repo, customer_app_name, app_key, logplex_token, erlang_cookie, ip):
     # HACK ALERT 

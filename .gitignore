@@ -7,3 +7,4 @@ gigalixir-run
 .eggs
 dist/
 grun/
+secrets/
