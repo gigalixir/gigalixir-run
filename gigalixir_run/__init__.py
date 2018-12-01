@@ -121,7 +121,7 @@ def init(ctx, repo, cmd, app_key, logplex_token, erlang_cookie, ip):
 
         launch(ctx, exec_fn, repo, app_key, ip=ip, release=release)
     except Exception as e:
-        log(logplex_token, repo, "-", e.message)
+        log(logplex_token, repo, "-", str(e.message))
         raise 
 
 def persist_env(repo, customer_app_name, app_key, logplex_token, erlang_cookie, ip):
