@@ -829,7 +829,7 @@ def test_run_mix_shell_with_no_cmd(mock_tarfile, mock_os, mock_subprocess, mock_
     with runner.isolated_filesystem():
         os.environ['HOME'] = '.'
 
-        result = runner.invoke(gigalixir_run.cli, ['run'])
+        result = runner.invoke(gigalixir_run.cli, ['shell', '--'])
 
         assert "Missing argument \"cmd\"" in result.output
         assert result.exit_code == 2

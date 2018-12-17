@@ -191,7 +191,7 @@ def distillery_job(ctx, cmd):
     launch(ctx, exec_fn, repo, app_key, release=release)
 
 @cli.command()
-@click.argument('cmd', nargs=-1)
+@click.argument('cmd', nargs=-1, required=True)
 @click.pass_context
 @report_errors
 def shell(ctx, cmd):
