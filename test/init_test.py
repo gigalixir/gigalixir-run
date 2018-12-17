@@ -810,6 +810,53 @@ def test_upgrade(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
 @mock.patch('gigalixir_run.os')
 @mock.patch('tarfile.open')
 @httpretty.activate
+def test_run_mix_shell_with_no_cmd(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
+    mock_os.path.isfile.return_value = False
+    stdin = mock.Mock(name='stdin')
+    mock_subprocess.PIPE = stdin
+
+    pipe_read = mock.Mock(name='pipe_read')
+    pipe_write = mock.Mock(name='pipe_write')
+    mock_os.pipe.return_value = (pipe_read, pipe_write)
+
+    # use a real dictionary for environ
+    my_env = dict()
+    mock_os.environ = my_env
+    mock_os.X_OK = os.X_OK
+
+    runner = CliRunner()
+    # Make sure this test does not modify the user's netrc file.
+    with runner.isolated_filesystem():
+        os.environ['HOME'] = '.'
+
+        result = runner.invoke(gigalixir_run.cli, ['run'])
+
+        assert "Missing argument \"cmd\"" in result.output
+        assert result.exit_code == 2
+        assert mock_tarfile.mock_calls == [
+        ]
+
+        assert mock_os.mock_calls == [
+        ]
+
+        assert mock_subprocess.mock_calls == [
+        ]
+
+        assert mock_get.mock_calls == [
+        ]
+
+        assert mock_open.mock_calls == [
+        ]
+
+        assert my_env == {
+        }
+
+@mock.patch('gigalixir_run.open', side_effect=mocked_open_fn("my_app"))
+@mock.patch('requests.get', side_effect=mocked_requests_get)
+@mock.patch('gigalixir_run.subprocess')
+@mock.patch('gigalixir_run.os')
+@mock.patch('tarfile.open')
+@httpretty.activate
 def test_run_mix_shell(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
     mock_os.path.isfile.return_value = False
     stdin = mock.Mock(name='stdin')

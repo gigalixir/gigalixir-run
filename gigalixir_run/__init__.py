@@ -334,7 +334,7 @@ def job(ctx, cmd):
 # we are removing distillery completely
 # we are moving eval over to it's own command
 @cli.command()
-@click.argument('cmd', nargs=-1)
+@click.argument('cmd', nargs=-1, required=True)
 @click.pass_context
 @report_errors
 def run(ctx, cmd):
