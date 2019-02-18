@@ -95,6 +95,9 @@ def init(ctx, repo, cmd, app_key, logplex_token, erlang_cookie, ip):
         if app_key == None:
             raise Exception("APP_KEY not found.")
 
+        # get host index
+        os.environ['HOST_INDEX'] = get_host_index(ctx.obj['host'], repo, app_key, os.environ['HOSTNAME'])
+
         start_ssh(repo, app_key)
 
         release = current_release(ctx.obj['host'], repo, app_key)
@@ -773,4 +776,14 @@ def load_secrets():
             value = fh.read().decode("utf-8")
             secrets[key] = value
     os.environ.update(encode_dict(secrets, 'utf-8'))
+
+def get_host_index(api_host, repo, app_key, hostname):
+    r = requests.get("%s/api/apps/%s/host_indexes/%s/assign" % (api_host, repo, hostname), auth = (repo, app_key), headers = {
+        'Content-Type': 'application/json',
+    }) 
+    if r.status_code != 200:
+        raise Exception(r)
+    else:
+        data = r.json()["data"]
+        return str(data["index"])
 

@@ -152,6 +152,14 @@ def mocked_requests_get(*args, **kwargs):
         }}, 200)
     elif args[0] == 'https://storage.googleapis.com/slug-bucket/production/sunny-wellgroomed-africanpiedkingfisher/releases/0.0.2/SHA/gigalixir_getting_started.tar.gz':
         return MockResponse(None, 200)
+    elif args[0] == 'https://api.gigalixir.com/api/apps/my_app/host_indexes/host1/assign':
+        return MockResponse({"data": {
+            "index": 1
+        }}, 200)
+    elif args[0] == 'https://api.gigalixir.com/api/apps/my_custom_vmargs_app/host_indexes/host1/assign':
+        return MockResponse({"data": {
+            "index": 1
+        }}, 200)
 
     return MockResponse(None, 404)
 
@@ -189,6 +197,7 @@ def test_mix_init(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
         my_env['LOGPLEX_TOKEN'] = 'fake-logplex-token'
         my_env['ERLANG_COOKIE'] = 'fake-cookie'
         my_env['MY_POD_IP'] = '1.2.3.4'
+        my_env['HOSTNAME'] = 'host1'
 
         result = runner.invoke(gigalixir_run.cli, ['init', 'my_app', 'foreground'])
         assert result.output == ''
@@ -206,6 +215,8 @@ def test_mix_init(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
             'FOO': '1\n2', 
             'PORT': '4000', 
             'LOGPLEX_TOKEN': 'fake-logplex-token', 
+            'HOSTNAME': 'host1',
+            'HOST_INDEX': '1'
         }
 
         assert mock_tarfile.mock_calls == [
@@ -250,6 +261,7 @@ def test_mix_init(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
         ]
 
         assert mock_get.mock_calls == [
+            mock.call(u'https://api.gigalixir.com/api/apps/my_app/host_indexes/host1/assign', auth=(u'my_app', u'fake-app-key'), headers={'Content-Type': 'application/json'}),
             mock.call(u'https://api.gigalixir.com/api/apps/my_app/releases/current', auth=(u'my_app', u'fake-app-key')),
             mock.call('https://storage.googleapis.com/slug-bucket/production/sunny-wellgroomed-africanpiedkingfisher/releases/0.0.2/SHA/gigalixir_getting_started.tar.gz', stream=True),
         ]
@@ -304,6 +316,7 @@ def test_distillery_init(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_
         my_env['LOGPLEX_TOKEN'] = 'fake-logplex-token'
         my_env['ERLANG_COOKIE'] = 'fake-cookie'
         my_env['MY_POD_IP'] = '1.2.3.4'
+        my_env['HOSTNAME'] = 'host1'
 
         result = runner.invoke(gigalixir_run.cli, ['init', 'my_app', 'foreground'])
         assert result.output == ''
@@ -326,7 +339,9 @@ def test_distillery_init(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_
             'FOO': '1\n2', 
             'PORT': '4000', 
             'LOGPLEX_TOKEN': 'fake-logplex-token', 
-            'VMARGS_PATH': '/release-config/vm.args'
+            'VMARGS_PATH': '/release-config/vm.args',
+            'HOSTNAME': 'host1',
+            'HOST_INDEX': '1'
         }
 
         assert mock_tarfile.mock_calls == [
@@ -372,6 +387,7 @@ def test_distillery_init(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_
         ]
 
         assert mock_get.mock_calls == [
+            mock.call(u'https://api.gigalixir.com/api/apps/my_app/host_indexes/host1/assign', auth=(u'my_app', u'fake-app-key'), headers={'Content-Type': 'application/json'}),
             mock.call(u'https://api.gigalixir.com/api/apps/my_app/releases/current', auth=(u'my_app', u'fake-app-key')),
             mock.call('https://storage.googleapis.com/slug-bucket/production/sunny-wellgroomed-africanpiedkingfisher/releases/0.0.2/SHA/gigalixir_getting_started.tar.gz', stream=True),
         ]
@@ -425,6 +441,7 @@ def test_custom_vmargs_init(mock_tarfile, mock_os, mock_subprocess, mock_get, mo
         my_env['LOGPLEX_TOKEN'] = 'fake-logplex-token'
         my_env['ERLANG_COOKIE'] = 'fake-cookie'
         my_env['MY_POD_IP'] = '1.2.3.4'
+        my_env['HOSTNAME'] = 'host1'
 
         result = runner.invoke(gigalixir_run.cli, ['init', 'my_custom_vmargs_app', 'foreground'])
         assert result.output == ''
@@ -448,6 +465,8 @@ def test_custom_vmargs_init(mock_tarfile, mock_os, mock_subprocess, mock_get, mo
             'LOGPLEX_TOKEN': 'fake-logplex-token', 
             # no VMARGS_PATH for custom vmargs
             # 'VMARGS_PATH': '/release-config/vm.args'
+            'HOSTNAME': 'host1',
+            'HOST_INDEX': '1'
         }
 
         assert mock_tarfile.mock_calls == [
@@ -494,6 +513,7 @@ def test_custom_vmargs_init(mock_tarfile, mock_os, mock_subprocess, mock_get, mo
         ]
 
         assert mock_get.mock_calls == [
+            mock.call(u'https://api.gigalixir.com/api/apps/my_custom_vmargs_app/host_indexes/host1/assign', auth=(u'my_custom_vmargs_app', u'fake-app-key'), headers={'Content-Type': 'application/json'}),
             mock.call(u'https://api.gigalixir.com/api/apps/my_custom_vmargs_app/releases/current', auth=(u'my_custom_vmargs_app', u'fake-app-key')),
             mock.call('https://storage.googleapis.com/slug-bucket/production/sunny-wellgroomed-africanpiedkingfisher/releases/0.0.2/SHA/gigalixir_getting_started.tar.gz', stream=True),
         ]
