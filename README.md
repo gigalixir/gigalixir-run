@@ -6,6 +6,8 @@ GIGALIXIR's app run environment. The Dockerfile here describes what is running o
 virtualenv grun
 source grun/bin/activate
 docker build --rm -t gigalixir-run .
+# for heroku-16, use
+docker build --rm -t gigalixir-run-16 . -f Dockerfile.heroku-16
 export APP_KEY=""
 export LOGPLEX_TOKEN=""
 ```
@@ -15,6 +17,8 @@ export LOGPLEX_TOKEN=""
 ```
 gigalixir rollback -r 330 -a bar
 docker run --rm -P -e APP_KEY=$APP_KEY -e MY_POD_IP=127.0.0.1 -e ERLANG_COOKIE=123 -e LOGPLEX_TOKEN=$LOGPLEX_TOKEN -e REPO=bar gigalixir-run init bar foreground
+# for heroku-16, use
+docker run --rm -P -e APP_KEY=$APP_KEY -e MY_POD_IP=127.0.0.1 -e ERLANG_COOKIE=123 -e LOGPLEX_TOKEN=$LOGPLEX_TOKEN -e REPO=bar gigalixir-run-16 init bar foreground
 docker run --rm -P -e APP_KEY=$APP_KEY -e MY_POD_IP=127.0.0.1 -e ERLANG_COOKIE=123 -e LOGPLEX_TOKEN=$LOGPLEX_TOKEN -e REPO=bar gigalixir-run job mix help
 docker run --rm -P -e APP_KEY=$APP_KEY -e MY_POD_IP=127.0.0.1 -e ERLANG_COOKIE=123 -e LOGPLEX_TOKEN=$LOGPLEX_TOKEN -e REPO=bar --entrypoint="" gigalixir-run /usr/bin/dumb-init -- gigalixir_run job -- mix --version
 ```
@@ -80,4 +84,8 @@ docker run --rm -p 4000:4000 -e APP_KEY=$APP_KEY -e MY_POD_IP=127.0.0.1 -e ERLAN
 ```
 docker build --rm -t us.gcr.io/gigalixir-152404/run .
 gcloud docker -- push us.gcr.io/gigalixir-152404/run
+ 
+# for heroku-16, use
+docker build --rm -t us.gcr.io/gigalixir-152404/run-16 . -f Dockerfile.heroku-16
+gcloud docker -- push us.gcr.io/gigalixir-152404/run-16
 ```
