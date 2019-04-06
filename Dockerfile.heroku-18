@@ -1,11 +1,16 @@
-# does not work yet. pdftk does not exist in the repo.
-# there is probably a way around it, but not gonna get into that just yet.
+# pdftk is not available in this image yet 
+# see https://askubuntu.com/questions/1029450/how-to-install-pdftk-on-ubuntu-18-04-bionic
 FROM heroku/heroku:18
 
-RUN apt-get update && apt-get -y install jq python-pip wkhtmltopdf pdftk xvfb
+RUN apt-get update && apt-get -y install jq python-pip wkhtmltopdf xvfb
 
-# ubuntu 16 specific stuff
+# ubuntu 16 specific stuff, also needed for ubuntu 18.
 RUN apt-get update && apt-get -y install libssl-dev cron
+# end
+
+# ubuntu 18 specific stuff
+# snaps don't work easily inside of docker right now..
+# RUN snap install pdftk
 # end
 
 RUN pip install -U pip setuptools

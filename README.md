@@ -88,4 +88,8 @@ gcloud docker -- push us.gcr.io/gigalixir-152404/run
 # for heroku-16, use
 docker build --rm -t us.gcr.io/gigalixir-152404/run-16 . -f Dockerfile.heroku-16
 gcloud docker -- push us.gcr.io/gigalixir-152404/run-16
+
+# for heroku-18, use
+docker build --rm -t us.gcr.io/gigalixir-152404/run-18 . -f Dockerfile.heroku-18
+gcloud docker -- push us.gcr.io/gigalixir-152404/run-18
 ```
