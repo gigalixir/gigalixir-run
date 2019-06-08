@@ -67,6 +67,23 @@ docker exec -it $(docker ps | awk '/gigalixir-run/ { print $1 }') /bin/bash
 gigalixir_run run -- remote_console 
 ```
 
+# for elixir releases 
+
+```
+gigalixir rollback -r 544 -a bar
+docker run --rm -P -e APP_KEY=$APP_KEY -e MY_POD_IP=127.0.0.1 -e ERLANG_COOKIE=123 -e LOGPLEX_TOKEN=$LOGPLEX_TOKEN gigalixir-run init bar start
+```
+
+# then exec into the container and run
+docker exec -it $(docker ps | awk '/gigalixir-run/ { print $1 }') /bin/bash
+
+```
+# TODO: make remote_console instead of remote work
+gigalixir_run remote
+```
+
+
+
 # for bootstrap
 
 ```

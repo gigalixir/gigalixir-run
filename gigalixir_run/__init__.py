@@ -520,6 +520,19 @@ def launch(ctx, exec_fn, repo, app_key, ip=None, release=None):
     erlang_cookie = load_env_var('ERLANG_COOKIE')
     os.environ['MY_NODE_NAME'] = "%s@%s" % (repo, ip)
     os.environ['MY_COOKIE'] = erlang_cookie
+
+    # elixir 1.9 adds releases which work differently.
+    # we can no longer set the node name in our custom /release-conigs/vm.args file 
+    # they intend for us to set the node name with these two env vars. see
+    # https://github.com/elixir-lang/elixir/blob/master/lib/mix/lib/mix/tasks/release.init.ex#L45
+    # and 
+    # https://github.com/elixir-lang/elixir/blob/master/lib/mix/lib/mix/tasks/release.init.ex#L232
+    #
+    # it's too bad that this adds even more *special* variables, but that's okay I guess as long
+    # as the user can still override them in the configs
+    os.environ['RELEASE_NODE'] = "%s@%s" % (repo, ip)
+    os.environ['RELEASE_DISTRIBUTION'] = "name"
+
     if is_distillery(customer_app_name):
         set_distillery_env(repo)
 
