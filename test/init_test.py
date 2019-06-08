@@ -203,6 +203,8 @@ def test_mix_init(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
         assert result.output == ''
         assert result.exit_code == 0
         assert my_env == {
+            'RELEASE_NODE': 'my_app@1.2.3.4',
+            'RELEASE_DISTRIBUTION': 'name',
             'GIGALIXIR_APP_NAME': 'fake-customer-app-name', 
             'GIGALIXIR_COMMAND': u'foreground', 
             'PYTHONIOENCODING': 'utf-8', 
@@ -322,6 +324,8 @@ def test_distillery_init(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_
         assert result.output == ''
         assert result.exit_code == 0
         assert my_env == {
+            'RELEASE_NODE': 'my_app@1.2.3.4',
+            'RELEASE_DISTRIBUTION': 'name',
             'GIGALIXIR_APP_NAME': 'fake-customer-app-name', 
             'GIGALIXIR_COMMAND': u'foreground', 
             'PYTHONIOENCODING': 'utf-8', 
@@ -447,6 +451,8 @@ def test_custom_vmargs_init(mock_tarfile, mock_os, mock_subprocess, mock_get, mo
         assert result.output == ''
         assert result.exit_code == 0
         assert my_env == {
+            'RELEASE_NODE': 'my_custom_vmargs_app@1.2.3.4',
+            'RELEASE_DISTRIBUTION': 'name',
             'GIGALIXIR_APP_NAME': 'fake-customer-app-name', 
             'GIGALIXIR_COMMAND': u'foreground', 
             'PYTHONIOENCODING': 'utf-8', 
@@ -558,6 +564,8 @@ def test_run_mix_remote_console(mock_tarfile, mock_os, mock_subprocess, mock_get
         assert result.output == ''
         assert result.exit_code == 0
         assert my_env == {
+            'RELEASE_NODE': 'my_app@1.2.3.4',
+            'RELEASE_DISTRIBUTION': 'name',
             # 'PYTHONIOENCODING': 'utf-8', 
             # 'MY_POD_IP': '1.2.3.4', 
             'DATABASE_URL': 'fake-database-url', 
@@ -653,6 +661,8 @@ def test_run_distillery_remote_console(mock_tarfile, mock_os, mock_subprocess, m
             'DATABASE_URL': 'fake-database-url', 
             'MY_COOKIE': 'fake-cookie', 
             'MY_NODE_NAME': 'my_app@1.2.3.4', 
+            'RELEASE_NODE': 'my_app@1.2.3.4',
+            'RELEASE_DISTRIBUTION': 'name',
             # 'ERLANG_COOKIE': 'fake-cookie', 
             'LC_ALL': 'en_US.UTF-8', 
             'FOO': '1\n2', 
@@ -807,6 +817,8 @@ def test_upgrade(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
         ]
 
         assert my_env == {
+            'RELEASE_NODE': 'my_app@1.2.3.4',
+            'RELEASE_DISTRIBUTION': 'name',
             'GIGALIXIR_DEFAULT_VMARGS': 'true', 
             'REPLACE_OS_VARS': 'true', 
             'RELX_REPLACE_OS_VARS': 'true', 
@@ -940,6 +952,8 @@ def test_run_mix_shell(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_op
         ]
 
         assert my_env == {
+            'RELEASE_NODE': 'my_app@1.2.3.4',
+            'RELEASE_DISTRIBUTION': 'name',
             # 'MY_POD_IP': '1.2.3.4', 
             'DATABASE_URL': 'fake-database-url', 
             'MY_COOKIE': 'fake-cookie', 
@@ -984,6 +998,8 @@ def test_mix_job(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
         assert result.output == ''
         assert result.exit_code == 0
         assert my_env == {
+            'RELEASE_NODE': 'my_app@1.2.3.4',
+            'RELEASE_DISTRIBUTION': 'name',
             'REPO': 'my_app',
             'APP_KEY': 'fake-app-key',
             'MY_POD_IP': '1.2.3.4', 
@@ -1069,6 +1085,8 @@ def test_distillery_job(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_o
         assert result.output == ''
         assert result.exit_code == 0
         assert my_env == {
+            'RELEASE_NODE': 'my_app@1.2.3.4',
+            'RELEASE_DISTRIBUTION': 'name',
             'VMARGS_PATH': '/release-config/vm.args',
             'GIGALIXIR_DEFAULT_VMARGS': 'true', 
             'REPLACE_OS_VARS': 'true', 
@@ -1161,6 +1179,8 @@ def test_distillery_eval(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_
         assert result.output == ''
         assert result.exit_code == 0
         assert my_env == {
+            'RELEASE_NODE': 'my_app@1.2.3.4',
+            'RELEASE_DISTRIBUTION': 'name',
             'GIGALIXIR_DEFAULT_VMARGS': 'true', 
             'REPLACE_OS_VARS': 'true', 
             'RELX_REPLACE_OS_VARS': 'true', 
@@ -1256,6 +1276,8 @@ def test_distillery_2_eval(mock_tarfile, mock_os, mock_subprocess, mock_get, moc
         assert result.output == ''
         assert result.exit_code == 0
         assert my_env == {
+            'RELEASE_NODE': 'distillery_2@1.2.3.4',
+            'RELEASE_DISTRIBUTION': 'name',
             'GIGALIXIR_DEFAULT_VMARGS': 'true', 
             'REPLACE_OS_VARS': 'true', 
             'RELX_REPLACE_OS_VARS': 'true', 
