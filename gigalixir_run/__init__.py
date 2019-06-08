@@ -57,6 +57,9 @@ MUST_USE_DISTILLERY_MSG = "This can only be done on a distillery release. See ht
 @click.pass_context
 def cli(ctx, env):
     ctx.obj = {}
+    logging.basicConfig(format='%(message)s')
+    logging.getLogger("gigalixir-run").setLevel(logging.INFO)
+
     ROLLBAR_POST_CLIENT_ITEM = "2413770c24624d498a9baa91d15f7ece"
     if env == "prod":
         rollbar.init(ROLLBAR_POST_CLIENT_ITEM, 'production', enabled=True)
@@ -168,6 +171,7 @@ def maybe_start_epmd():
 @click.pass_context
 @report_errors
 def distillery_job(ctx, cmd):
+    # TODO: load repo from cmd line args instead? to be consistent with init
     repo = load_env_var('REPO')
     app_key = load_env_var('APP_KEY')
     release = current_release(ctx.obj['host'], repo, app_key)
@@ -193,6 +197,8 @@ def distillery_job(ctx, cmd):
 
     launch(ctx, exec_fn, repo, app_key, release=release)
 
+# runs any arbitrary command inside a running container for example
+# gigalixir_run shell -- bin/app eval '123+123'
 @cli.command()
 @click.argument('cmd', nargs=-1, required=True)
 @click.pass_context
@@ -225,6 +231,23 @@ def distillery_eval(ctx, cmd):
         distillery_command_exec(customer_app_name, [eval_command, cmd])
     launch(ctx, exec_fn, repo, app_key, ip=ip)
 
+def get_capabilities(ctx, repo, app_key):
+    release = current_release(ctx.obj['host'], repo, app_key)
+    return release.get("capabilities")
+
+def detect_remote_command(ctx, repo, app_key):
+    # current_release *could* be wrong. if you deployed, but this is run on an old container before it
+    # is terminated.
+    capabilities = get_capabilities(ctx, repo, app_key)
+    logging.getLogger("gigalixir-run").debug(capabilities)
+    remote_command = "remote_console"
+
+    # some kind of monad usable here?
+    if capabilities:
+        remote_command = capabilities.get("remote_command", "remote_console")
+    
+    return remote_command
+
 def detect_eval_command(ctx, repo, app_key):
     # we choose eval or rpc depending on if we are running distillery 2.0 or not.
     # really, we check the capabilities of the release. if distillery.eval == elixir then
@@ -234,8 +257,7 @@ def detect_eval_command(ctx, repo, app_key):
     #
     # current_release *could* be wrong. if you deployed, but this is run on an old container before it
     # is terminated.
-    release = current_release(ctx.obj['host'], repo, app_key)
-    capabilities = release.get("capabilities")
+    capabilities = get_capabilities(ctx, repo, app_key)
     eval_language = "erlang"
     # some kind of monad usable here?
     if capabilities:
@@ -295,11 +317,15 @@ def remote_console(ctx):
     def exec_fn(logplex_token, customer_app_name, repo, hostname):
         if is_distillery(customer_app_name):
             maybe_use_default_vm_args()
-            distillery_command_exec(customer_app_name, ["remote_console"])
+            remote_command = detect_remote_command(ctx, repo, app_key)
+            logging.getLogger("gigalixir-run").debug(remote_command)
+            distillery_command_exec(customer_app_name, [remote_command])
         else:
             os.execvp('iex', ['iex', '--name', 'remsh@%s' % ip, '--cookie', os.environ['MY_COOKIE'], '--remsh', os.environ['MY_NODE_NAME']])
     launch(ctx, exec_fn, repo, app_key, ip=ip)
 
+# runs an arbitrary command in a *new* container, for example
+# gigalixir_run job -- bin/app eval '123+123'
 @cli.command()
 @click.argument('cmd', nargs=-1)
 @click.pass_context

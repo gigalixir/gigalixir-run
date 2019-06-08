@@ -72,6 +72,7 @@ gigalixir_run run -- remote_console
 ```
 gigalixir rollback -r 544 -a bar
 docker run --rm -P -e APP_KEY=$APP_KEY -e MY_POD_IP=127.0.0.1 -e ERLANG_COOKIE=123 -e LOGPLEX_TOKEN=$LOGPLEX_TOKEN gigalixir-run init bar start
+docker run --rm -P -e APP_KEY=$APP_KEY -e MY_POD_IP=127.0.0.1 -e ERLANG_COOKIE=123 -e LOGPLEX_TOKEN=$LOGPLEX_TOKEN -e REPO=bar gigalixir-run job -- bin/gigalixir_getting_started eval 'IO.inspect 123+123'
 ```
 
 # then exec into the container and run
