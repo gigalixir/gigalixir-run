@@ -144,8 +144,6 @@ def persist_env(repo, customer_app_name, app_key, logplex_token, erlang_cookie, 
         f.write(os.environ['MY_POD_IP'])
     with open('%s/ERLANG_COOKIE' % kube_var_path, 'w') as f:
         f.write(os.environ[ 'ERLANG_COOKIE' ])
-    with open('%s/APP_NAME' % kube_var_path, 'w') as f:
-        f.write(repo)
     with open('%s/REPO' % kube_var_path, 'w') as f:
         f.write(repo)
     with open('%s/APP' % kube_var_path, 'w') as f:
@@ -546,6 +544,11 @@ def launch(ctx, exec_fn, repo, app_key, ip=None, release=None):
     # iex --remsh uses MY_NODE_NAME and MY_COOKIE
     ip = ip or load_env_var('MY_POD_IP')
     erlang_cookie = load_env_var('ERLANG_COOKIE')
+
+    # APP_NAME is passed in by kubernetes when running init, but not for things like ps:run aka shell.
+    # we need to load it here in case the app relies on it existing
+    # TODO: any other env vars that are required besides APP_NAME?
+    os.environ['APP_NAME'] = repo
     os.environ['MY_NODE_NAME'] = "%s@%s" % (repo, ip)
     os.environ['MY_COOKIE'] = erlang_cookie
 

@@ -203,6 +203,7 @@ def test_mix_init(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
         assert result.output == ''
         assert result.exit_code == 0
         assert my_env == {
+            'APP_NAME': 'my_app',
             'RELEASE_NODE': 'my_app@1.2.3.4',
             'RELEASE_DISTRIBUTION': 'name',
             'GIGALIXIR_APP_NAME': 'fake-customer-app-name', 
@@ -271,7 +272,6 @@ def test_mix_init(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
         assert mock_open.mock_calls == [
             mock.call('/kube-env-vars/MY_POD_IP', 'w'),
             mock.call('/kube-env-vars/ERLANG_COOKIE', 'w'),
-            mock.call('/kube-env-vars/APP_NAME', 'w'),
             mock.call('/kube-env-vars/REPO', 'w'),
             mock.call('/kube-env-vars/APP', 'w'),
             mock.call('/kube-env-vars/APP_KEY', 'w'),
@@ -325,6 +325,7 @@ def test_distillery_init(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_
         assert result.output == ''
         assert result.exit_code == 0
         assert my_env == {
+            'APP_NAME': 'my_app',
             'RELEASE_NODE': 'my_app@1.2.3.4',
             'RELEASE_DISTRIBUTION': 'name',
             'GIGALIXIR_APP_NAME': 'fake-customer-app-name', 
@@ -400,7 +401,6 @@ def test_distillery_init(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_
         assert mock_open.mock_calls == [
             mock.call('/kube-env-vars/MY_POD_IP', 'w'),
             mock.call('/kube-env-vars/ERLANG_COOKIE', 'w'),
-            mock.call('/kube-env-vars/APP_NAME', 'w'),
             mock.call('/kube-env-vars/REPO', 'w'),
             mock.call('/kube-env-vars/APP', 'w'),
             mock.call('/kube-env-vars/APP_KEY', 'w'),
@@ -453,6 +453,7 @@ def test_custom_vmargs_init(mock_tarfile, mock_os, mock_subprocess, mock_get, mo
         assert result.output == ''
         assert result.exit_code == 0
         assert my_env == {
+            'APP_NAME': 'my_custom_vmargs_app',
             'RELEASE_NODE': 'my_custom_vmargs_app@1.2.3.4',
             'RELEASE_DISTRIBUTION': 'name',
             'GIGALIXIR_APP_NAME': 'fake-customer-app-name', 
@@ -529,7 +530,6 @@ def test_custom_vmargs_init(mock_tarfile, mock_os, mock_subprocess, mock_get, mo
         assert mock_open.mock_calls == [
             mock.call('/kube-env-vars/MY_POD_IP', 'w'),
             mock.call('/kube-env-vars/ERLANG_COOKIE', 'w'),
-            mock.call('/kube-env-vars/APP_NAME', 'w'),
             mock.call('/kube-env-vars/REPO', 'w'),
             mock.call('/kube-env-vars/APP', 'w'),
             mock.call('/kube-env-vars/APP_KEY', 'w'),
@@ -567,6 +567,7 @@ def test_run_mix_remote_console(mock_tarfile, mock_os, mock_subprocess, mock_get
         assert result.output == ''
         assert result.exit_code == 0
         assert my_env == {
+            'APP_NAME': 'my_app',
             'RELEASE_NODE': 'my_app@1.2.3.4',
             'RELEASE_DISTRIBUTION': 'name',
             # 'PYTHONIOENCODING': 'utf-8', 
@@ -655,6 +656,7 @@ def test_run_distillery_remote_console(mock_tarfile, mock_os, mock_subprocess, m
         assert result.output == ''
         assert result.exit_code == 0
         assert my_env == {
+            'APP_NAME': 'my_app',
             'GIGALIXIR_DEFAULT_VMARGS': 'true', 
             'REPLACE_OS_VARS': 'true', 
             'RELX_REPLACE_OS_VARS': 'true', 
@@ -820,6 +822,7 @@ def test_upgrade(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
         ]
 
         assert my_env == {
+            'APP_NAME': 'my_app',
             'RELEASE_NODE': 'my_app@1.2.3.4',
             'RELEASE_DISTRIBUTION': 'name',
             'GIGALIXIR_DEFAULT_VMARGS': 'true', 
@@ -955,6 +958,7 @@ def test_run_mix_shell(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_op
         ]
 
         assert my_env == {
+            'APP_NAME': 'my_app',
             'RELEASE_NODE': 'my_app@1.2.3.4',
             'RELEASE_DISTRIBUTION': 'name',
             # 'MY_POD_IP': '1.2.3.4', 
@@ -1001,6 +1005,7 @@ def test_mix_job(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
         assert result.output == ''
         assert result.exit_code == 0
         assert my_env == {
+            'APP_NAME': 'my_app',
             'RELEASE_NODE': 'my_app@1.2.3.4',
             'RELEASE_DISTRIBUTION': 'name',
             'REPO': 'my_app',
@@ -1088,6 +1093,7 @@ def test_distillery_job(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_o
         assert result.output == ''
         assert result.exit_code == 0
         assert my_env == {
+            'APP_NAME': 'my_app',
             'RELEASE_NODE': 'my_app@1.2.3.4',
             'RELEASE_DISTRIBUTION': 'name',
             'VMARGS_PATH': '/release-config/vm.args',
@@ -1182,6 +1188,7 @@ def test_distillery_eval(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_
         assert result.output == ''
         assert result.exit_code == 0
         assert my_env == {
+            'APP_NAME': 'my_app',
             'RELEASE_NODE': 'my_app@1.2.3.4',
             'RELEASE_DISTRIBUTION': 'name',
             'GIGALIXIR_DEFAULT_VMARGS': 'true', 
@@ -1279,6 +1286,7 @@ def test_distillery_2_eval(mock_tarfile, mock_os, mock_subprocess, mock_get, moc
         assert result.output == ''
         assert result.exit_code == 0
         assert my_env == {
+            'APP_NAME': 'distillery_2',
             'RELEASE_NODE': 'distillery_2@1.2.3.4',
             'RELEASE_DISTRIBUTION': 'name',
             'GIGALIXIR_DEFAULT_VMARGS': 'true', 
