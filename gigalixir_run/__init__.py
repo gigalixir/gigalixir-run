@@ -244,7 +244,9 @@ def detect_remote_command(ctx, repo, app_key):
 
     # some kind of monad usable here?
     if capabilities:
-        remote_command = capabilities.get("remote_command", "remote_console")
+        dist = capabilities.get("distillery")
+        if dist:
+            remote_command = dist.get("remote_command", "remote_console")
     
     return remote_command
 
