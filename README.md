@@ -100,14 +100,6 @@ docker run --rm -p 4000:4000 -e APP_KEY=$APP_KEY -e MY_POD_IP=127.0.0.1 -e ERLAN
 # Deploy
 
 ```
-docker build --rm -t us.gcr.io/gigalixir-152404/run .
-gcloud docker -- push us.gcr.io/gigalixir-152404/run
- 
-# for heroku-16, use
-docker build --rm -t us.gcr.io/gigalixir-152404/run-16 . -f Dockerfile.heroku-16
-gcloud docker -- push us.gcr.io/gigalixir-152404/run-16
-
-# for heroku-18, use
-docker build --rm -t us.gcr.io/gigalixir-152404/run-18 . -f Dockerfile.heroku-18
-gcloud docker -- push us.gcr.io/gigalixir-152404/run-18
+docker build --rm -t us.gcr.io/gigalixir-152404/run . && docker build --rm -t us.gcr.io/gigalixir-152404/run-16 . -f Dockerfile.heroku-16 && docker build --rm -t us.gcr.io/gigalixir-152404/run-18 . -f Dockerfile.heroku-18
+gcloud docker -- push us.gcr.io/gigalixir-152404/run && gcloud docker -- push us.gcr.io/gigalixir-152404/run-16 && gcloud docker -- push us.gcr.io/gigalixir-152404/run-18
 ```

@@ -271,6 +271,7 @@ def test_mix_init(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
         assert mock_open.mock_calls == [
             mock.call('/kube-env-vars/MY_POD_IP', 'w'),
             mock.call('/kube-env-vars/ERLANG_COOKIE', 'w'),
+            mock.call('/kube-env-vars/APP_NAME', 'w'),
             mock.call('/kube-env-vars/REPO', 'w'),
             mock.call('/kube-env-vars/APP', 'w'),
             mock.call('/kube-env-vars/APP_KEY', 'w'),
@@ -399,6 +400,7 @@ def test_distillery_init(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_
         assert mock_open.mock_calls == [
             mock.call('/kube-env-vars/MY_POD_IP', 'w'),
             mock.call('/kube-env-vars/ERLANG_COOKIE', 'w'),
+            mock.call('/kube-env-vars/APP_NAME', 'w'),
             mock.call('/kube-env-vars/REPO', 'w'),
             mock.call('/kube-env-vars/APP', 'w'),
             mock.call('/kube-env-vars/APP_KEY', 'w'),
@@ -527,6 +529,7 @@ def test_custom_vmargs_init(mock_tarfile, mock_os, mock_subprocess, mock_get, mo
         assert mock_open.mock_calls == [
             mock.call('/kube-env-vars/MY_POD_IP', 'w'),
             mock.call('/kube-env-vars/ERLANG_COOKIE', 'w'),
+            mock.call('/kube-env-vars/APP_NAME', 'w'),
             mock.call('/kube-env-vars/REPO', 'w'),
             mock.call('/kube-env-vars/APP', 'w'),
             mock.call('/kube-env-vars/APP_KEY', 'w'),

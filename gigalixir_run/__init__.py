@@ -144,6 +144,8 @@ def persist_env(repo, customer_app_name, app_key, logplex_token, erlang_cookie, 
         f.write(os.environ['MY_POD_IP'])
     with open('%s/ERLANG_COOKIE' % kube_var_path, 'w') as f:
         f.write(os.environ[ 'ERLANG_COOKIE' ])
+    with open('%s/APP_NAME' % kube_var_path, 'w') as f:
+        f.write(repo)
     with open('%s/REPO' % kube_var_path, 'w') as f:
         f.write(repo)
     with open('%s/APP' % kube_var_path, 'w') as f:
