@@ -701,7 +701,8 @@ def encode_dict(d, encoding):
 
 # from https://stackoverflow.com/a/7198338/365377
 def source(script):
-    source = 'source %s' % script
+    # hack alert: ignore output so that we can parse the env dump.
+    source = 'source %s >/dev/null' % script
     activate = 'source /tmp/gigalixir/bin/activate'
     deactivate = 'deactivate'
     dump = '/usr/bin/python -c "import os, json;print json.dumps(dict(os.environ))"'
