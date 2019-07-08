@@ -50,7 +50,7 @@ urllib3.contrib.pyopenssl.inject_into_urllib3()
 # distillery_job  True        False        True          first pass
 # bootstrap       N/A         N/A          N/A, but True
 
-MUST_USE_DISTILLERY_MSG = "This can only be done on a distillery release. See https://gigalixir.readthedocs.io/en/latest/main.html#mix-vs-distillery"
+MUST_USE_DISTILLERY_MSG = "This can only be done on a release. See https://gigalixir.readthedocs.io/en/latest/main.html#mix-vs-distillery-vs-elixir-releases"
 
 @click.group()
 @click.option('--env', envvar='GIGALIXIR_ENV', default='prod', help="GIGALIXIR environment [prod, dev].")
