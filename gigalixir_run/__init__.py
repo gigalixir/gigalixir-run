@@ -402,9 +402,10 @@ def generate_vmargs(node_name, cookie):
 @click.option('--logplex_token', envvar='LOGPLEX_TOKEN', default=None)
 @click.option('--erlang_cookie', envvar='ERLANG_COOKIE', default=None)
 @click.option('--ip', envvar='MY_POD_IP', default=None)
+@click.option('--log_shuttle', envvar='LOG_SHUTTLE', default="true")
 @click.pass_context
 @report_errors
-def api(ctx, repo, customer_app_name, slug_url, cmd, app_key, secret_key_base, logplex_token, erlang_cookie, ip):
+def api(ctx, repo, customer_app_name, slug_url, cmd, app_key, secret_key_base, logplex_token, erlang_cookie, ip, log_shuttle):
     """
     For internal gigalixir use. Used to start the api server without a cyclical dependency (on the api server)
     Pretty much a copy and paste of init() except with the current_release lines replaced with explicit parameters
@@ -471,7 +472,10 @@ def api(ctx, repo, customer_app_name, slug_url, cmd, app_key, secret_key_base, l
         if is_distillery(customer_app_name):
             maybe_use_default_vm_args()
         ps = foreman_start(customer_app_name, cmd)
-        pipe_to_log_shuttle(ps, cmd, logplex_token, repo, hostname)
+        if log_shuttle == "true":
+            pipe_to_log_shuttle(ps, cmd, logplex_token, repo, hostname)
+        else:
+            subprocess.check_call(["cat"], stdin=ps.stdout)
         ps.wait()
 
 @cli.command()
