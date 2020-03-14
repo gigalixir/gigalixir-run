@@ -471,12 +471,22 @@ def api(ctx, repo, customer_app_name, slug_url, cmd, app_key, secret_key_base, l
         load_profile()
         if is_distillery(customer_app_name):
             maybe_use_default_vm_args()
-        ps = foreman_start(customer_app_name, cmd)
+
         if log_shuttle == "true":
+            ps = foreman_start(customer_app_name, cmd)
             pipe_to_log_shuttle(ps, cmd, logplex_token, repo, hostname)
+            ps.wait()
         else:
-            subprocess.check_call(["cat"], stdin=ps.stdout)
-        ps.wait()
+            # we avoid using foreman because it adds web.1 | to the log format and 
+            # i think that messes up stackdriver log parsing. 
+            gigalixir_cmd = ' '.join(cmd)
+            os.environ['GIGALIXIR_APP_NAME'] = customer_app_name
+            os.environ['GIGALIXIR_COMMAND'] = gigalixir_cmd
+            os.environ['PYTHONIOENCODING'] = 'utf-8'
+            popen_cmd = ["/app/bin/%s" % customer_app_name, gigalixir_cmd]
+
+            ps = subprocess.Popen(popen_cmd)
+            ps.wait()
 
 @cli.command()
 @click.argument('customer_app_name', nargs=1)
