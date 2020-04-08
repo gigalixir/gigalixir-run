@@ -152,6 +152,8 @@ def persist_env(repo, customer_app_name, app_key, logplex_token, erlang_cookie, 
         f.write(app_key)
     with open('%s/LOGPLEX_TOKEN' % kube_var_path, 'w') as f:
         f.write(os.environ[ 'LOGPLEX_TOKEN' ])
+    with open('%s/SECRET_KEY_BASE' % kube_var_path, 'w') as f:
+        f.write(os.environ[ 'SECRET_KEY_BASE' ])
 
 def extract_file(folder, filename):
     with cd(folder):
@@ -567,6 +569,11 @@ def launch(ctx, exec_fn, repo, app_key, ip=None, release=None):
     os.environ['APP_NAME'] = repo
     os.environ['MY_NODE_NAME'] = "%s@%s" % (repo, ip)
     os.environ['MY_COOKIE'] = erlang_cookie
+
+    # added because newer versions of phoenix fail without it and the current release does not
+    # return it. it is now a "special" env var that is saved on init and loaded each time the user
+    # runs gigalixir_run shell or other commands.
+    os.environ['SECRET_KEY_BASE'] = load_env_var('SECRET_KEY_BASE')
 
     # elixir 1.9 adds releases which work differently.
     # we can no longer set the node name in our custom /release-conigs/vm.args file 

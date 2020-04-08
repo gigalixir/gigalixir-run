@@ -25,6 +25,14 @@ setup(
         'idna~=2.5',
         'certifi~=2017.4.17',
         'pystache~=0.5.4',
+
+        # I guess this is required to peg pyparsing to 2.2.0 
+        # which is used by "packaging". where is that from?
+        # what is the correct way to peg dependencies into 
+        # something like a lock file? is this it?
+        # also, it is time to EOL gigalixir-14 and move this
+        # to python 3.
+        'pyparsing~=2.2.0',
     ],
     entry_points='''
         [console_scripts]
