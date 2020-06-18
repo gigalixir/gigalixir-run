@@ -576,9 +576,6 @@ def launch(ctx, exec_fn, repo, app_key, ip=None, release=None):
     # for everything else. unsure why we don't just use ERLANG_COOKIE instead.
     os.environ['MY_COOKIE'] = erlang_cookie
 
-    # for elixir releases
-    os.environ['RELEASE_COOKIE'] = os.environ['MY_COOKIE']
-
     # added because newer versions of phoenix fail without it and the current release does not
     # return it. it is now a "special" env var that is saved on init and loaded each time the user
     # runs gigalixir_run shell or other commands.
@@ -593,8 +590,11 @@ def launch(ctx, exec_fn, repo, app_key, ip=None, release=None):
     #
     # it's too bad that this adds even more *special* variables, but that's okay I guess as long
     # as the user can still override them in the configs
+    #
+    # similarly we use RELEASE_COOKIE instead of a custom vmargs
     os.environ['RELEASE_NODE'] = "%s@%s" % (repo, ip)
     os.environ['RELEASE_DISTRIBUTION'] = "name"
+    os.environ['RELEASE_COOKIE'] = os.environ['MY_COOKIE']
 
     if is_distillery(customer_app_name):
         set_distillery_env(repo)
