@@ -325,6 +325,7 @@ def remote_console(ctx):
             logging.getLogger("gigalixir-run").debug(remote_command)
             distillery_command_exec(customer_app_name, [remote_command])
         else:
+            # MY_COOKIE here is set in the launch function and is identical to ERLANG_COOKIE.. why have both?
             os.execvp('iex', ['iex', '--name', 'remsh@%s' % ip, '--cookie', os.environ['MY_COOKIE'], '--remsh', os.environ['MY_NODE_NAME']])
     launch(ctx, exec_fn, repo, app_key, ip=ip)
 
@@ -462,6 +463,9 @@ def api(ctx, repo, customer_app_name, slug_url, cmd, app_key, secret_key_base, l
     # iex --remsh uses MY_NODE_NAME and MY_COOKIE
     os.environ['MY_NODE_NAME'] = "%s@%s" % (repo, ip)
     os.environ['MY_COOKIE'] = erlang_cookie
+
+    # for elixir releases
+    os.environ['RELEASE_COOKIE'] = os.environ['MY_COOKIE']
     if is_distillery(customer_app_name):
         set_distillery_env(repo)
 
@@ -568,7 +572,12 @@ def launch(ctx, exec_fn, repo, app_key, ip=None, release=None):
     # TODO: any other env vars that are required besides APP_NAME?
     os.environ['APP_NAME'] = repo
     os.environ['MY_NODE_NAME'] = "%s@%s" % (repo, ip)
+
+    # for everything else. unsure why we don't just use ERLANG_COOKIE instead.
     os.environ['MY_COOKIE'] = erlang_cookie
+
+    # for elixir releases
+    os.environ['RELEASE_COOKIE'] = os.environ['MY_COOKIE']
 
     # added because newer versions of phoenix fail without it and the current release does not
     # return it. it is now a "special" env var that is saved on init and loaded each time the user

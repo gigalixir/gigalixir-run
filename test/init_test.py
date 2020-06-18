@@ -1,4 +1,9 @@
 # This Python file uses the following encoding: utf-8
+#
+# This was useful when I was doing a full refactor to make sure the commands run were
+# identical, but I'm not sure this is useful anymore given how brittle it is.
+# Everytime the code changes, the tests change, which is a smell. Maybe we should just
+# do away with this test and come up with a new one that is more useful.
 import os
 from sure import expect
 import subprocess
