@@ -466,6 +466,12 @@ def api(ctx, repo, customer_app_name, slug_url, cmd, app_key, secret_key_base, l
 
     # for elixir releases
     os.environ['RELEASE_COOKIE'] = os.environ['MY_COOKIE']
+
+    # if in mix mode, these are baked in at compile time, but now with 
+    # elixir releases, these need to be available without distillery
+    os.environ['LIBCLUSTER_KUBERNETES_SELECTOR'] = "repo=%s" % repo
+    os.environ['LIBCLUSTER_KUBERNETES_NODE_BASENAME'] = repo
+
     if is_distillery(customer_app_name):
         set_distillery_env(repo)
 
@@ -596,6 +602,11 @@ def launch(ctx, exec_fn, repo, app_key, ip=None, release=None):
     os.environ['RELEASE_DISTRIBUTION'] = "name"
     os.environ['RELEASE_COOKIE'] = os.environ['MY_COOKIE']
 
+    # if in mix mode, these are baked in at compile time, but now with 
+    # elixir releases, these need to be available without distillery
+    os.environ['LIBCLUSTER_KUBERNETES_SELECTOR'] = "repo=%s" % repo
+    os.environ['LIBCLUSTER_KUBERNETES_NODE_BASENAME'] = repo
+
     if is_distillery(customer_app_name):
         set_distillery_env(repo)
 
@@ -621,9 +632,6 @@ def set_distillery_env(repo):
     # mix mode does not replace os vars at runtime.
     os.environ['REPLACE_OS_VARS'] = "true"
     os.environ['RELX_REPLACE_OS_VARS'] = "true"
-    # if in mix mode, these are baked in at compile time
-    os.environ['LIBCLUSTER_KUBERNETES_SELECTOR'] = "repo=%s" % repo
-    os.environ['LIBCLUSTER_KUBERNETES_NODE_BASENAME'] = repo
 
 def maybe_use_default_vm_args():
     if os.environ['GIGALIXIR_DEFAULT_VMARGS'].lower() == "true":
