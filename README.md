@@ -8,6 +8,8 @@ source grun/bin/activate
 docker build --rm -t gigalixir-run .
 # for heroku-16, use
 docker build --rm -t gigalixir-run-16 . -f Dockerfile.heroku-16
+# for heroku-18, use
+docker build --rm -t gigalixir-run-18 . -f Dockerfile.heroku-18
 export APP_KEY=""
 export LOGPLEX_TOKEN=""
 ```

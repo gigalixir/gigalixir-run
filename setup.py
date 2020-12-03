@@ -33,6 +33,9 @@ setup(
         # also, it is time to EOL gigalixir-14 and move this
         # to python 3.
         'pyparsing~=2.2.0',
+
+        # version 20.8 doesn't seem to work on cedar-14..
+        'packaging~=16.8.0',
     ],
     entry_points='''
         [console_scripts]

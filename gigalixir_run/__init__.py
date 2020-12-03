@@ -533,8 +533,16 @@ def upgrade(ctx, version):
 
     # get mix version from slug url. 
     # TODO: make this explicit in the database.
-    # https://storage.googleapis.com/slug-bucket/production/sunny-wellgroomed-africanpiedkingfisher/releases/0.0.2/SHA/gigalixir_getting_started.tar.gz
-    mix_version = urlparse.urlparse(slug_url).path.split('/')[5]
+    cloud = release["cloud"]
+    if cloud == "gcp":
+        # https://storage.googleapis.com/slug-bucket/production/bar/releases/HEAD/SHA/UUID/app.tar.gz
+        mix_version = urlparse.urlparse(slug_url).path.split('/')[5]
+    elif cloud == "aws":
+        # https://gigalixir-slugs-west.s3-us-west-2.amazonaws.com/production/bar-west/releases/HEAD/SHA/UUID/app.tar.gz
+        mix_version = urlparse.urlparse(slug_url).path.split('/')[4]
+    else:
+        raise Exception("Unknown cloud: %s" % cloud)
+
 
     release_dir = "/app/releases/%s" % mix_version
     if not os.path.exists(release_dir):
