@@ -3,6 +3,9 @@ GIGALIXIR's app run environment. The Dockerfile here describes what is running o
 # Development
 
 ```
+docker pull heroku/heroku:16
+docker pull heroku/heroku:18
+docker pull heroku/heroku:20
 virtualenv grun
 source grun/bin/activate
 docker build --rm -t gigalixir-run .
