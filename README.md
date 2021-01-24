@@ -3,11 +3,21 @@ GIGALIXIR's app run environment. The Dockerfile here describes what is running o
 # Development
 
 ```
+python3 -m venv venv3
+source venv3/bin/activate
+pip3 install -U pip
+pip3 install -U setuptools
+pip3 install -e .[dev]
+pytest
+pytest -k test_mix_init
+```
+
+Manual testing
+```
 docker pull heroku/heroku:16
 docker pull heroku/heroku:18
 docker pull heroku/heroku:20
-virtualenv grun
-source grun/bin/activate
+
 docker build --rm -t gigalixir-run .
 # for heroku-16, use
 docker build --rm -t gigalixir-run-16 . -f Dockerfile.heroku-16

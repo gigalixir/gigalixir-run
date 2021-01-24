@@ -1,12 +1,12 @@
 FROM heroku/heroku:16
 
-RUN apt-get update && apt-get -y install jq python-pip wkhtmltopdf pdftk xvfb
+RUN apt-get update && apt-get -y install jq python3-pip wkhtmltopdf pdftk xvfb
 
 # ubuntu 16 specific stuff
 RUN apt-get update && apt-get -y install libssl-dev cron
 # end
 
-RUN pip install -U pip setuptools
+RUN pip3 install -U pip setuptools
 RUN wget https://github.com/Yelp/dumb-init/releases/download/v1.2.0/dumb-init_1.2.0_amd64.deb
 RUN dpkg -i dumb-init_*.deb
 
@@ -16,6 +16,11 @@ RUN dpkg -i dumb-init_*.deb
 RUN pip install pyOpenSSL
 RUN pip install virtualenv
 RUN gem install foreman
+
+# required by click on python3
+# see https://click.palletsprojects.com/en/7.x/python3/
+ENV LANG C.UTF-8
+ENV LC_ALL C.UTF-8
 
 # Port is always 4000 for no good reason.
 ENV PORT 4000
@@ -35,7 +40,7 @@ RUN cp /root/.profile /app/.profile
 ADD . /opt/gigalixir
 WORKDIR /opt/gigalixir
 
-RUN python setup.py install
+RUN python3 setup.py install
 WORKDIR /app
 
 

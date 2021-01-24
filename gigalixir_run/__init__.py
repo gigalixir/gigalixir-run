@@ -1,5 +1,4 @@
 import sys
-import urlparse
 import glob
 from functools import wraps
 import contextlib
@@ -11,12 +10,10 @@ import subprocess
 import os
 import json
 import click
-import urllib3.contrib.pyopenssl
 import signal
 import pystache
 import distutils.spawn
-from six.moves.urllib.parse import quote
-urllib3.contrib.pyopenssl.inject_into_urllib3()
+from six.moves.urllib.parse import urlparse
 
 # how is launch used?
 # 1. init bar foreground -> /app/bin/ggs foreground
@@ -127,7 +124,7 @@ def init(ctx, repo, cmd, app_key, logplex_token, erlang_cookie, ip):
 
         launch(ctx, exec_fn, repo, app_key, ip=ip, release=release)
     except Exception as e:
-        log(logplex_token, repo, "-", str(e.message))
+        log(logplex_token, repo, "-", str(e))
         raise 
 
 def persist_env(repo, customer_app_name, app_key, logplex_token, erlang_cookie, ip):
@@ -140,19 +137,19 @@ def persist_env(repo, customer_app_name, app_key, logplex_token, erlang_cookie, 
     kube_var_path = "/kube-env-vars"
     if not os.path.exists(kube_var_path):
         os.makedirs(kube_var_path)
-    with open('%s/MY_POD_IP' % kube_var_path, 'w') as f:
+    with open('%s/MY_POD_IP' % kube_var_path, 'w', encoding='utf8') as f:
         f.write(os.environ['MY_POD_IP'])
-    with open('%s/ERLANG_COOKIE' % kube_var_path, 'w') as f:
+    with open('%s/ERLANG_COOKIE' % kube_var_path, 'w', encoding='utf8') as f:
         f.write(os.environ[ 'ERLANG_COOKIE' ])
-    with open('%s/REPO' % kube_var_path, 'w') as f:
+    with open('%s/REPO' % kube_var_path, 'w', encoding='utf8') as f:
         f.write(repo)
-    with open('%s/APP' % kube_var_path, 'w') as f:
+    with open('%s/APP' % kube_var_path, 'w', encoding='utf8') as f:
         f.write(customer_app_name)
-    with open('%s/APP_KEY' % kube_var_path, 'w') as f:
+    with open('%s/APP_KEY' % kube_var_path, 'w', encoding='utf8') as f:
         f.write(app_key)
-    with open('%s/LOGPLEX_TOKEN' % kube_var_path, 'w') as f:
+    with open('%s/LOGPLEX_TOKEN' % kube_var_path, 'w', encoding='utf8') as f:
         f.write(os.environ[ 'LOGPLEX_TOKEN' ])
-    with open('%s/SECRET_KEY_BASE' % kube_var_path, 'w') as f:
+    with open('%s/SECRET_KEY_BASE' % kube_var_path, 'w', encoding='utf8') as f:
         f.write(os.environ[ 'SECRET_KEY_BASE' ])
 
 def extract_file(folder, filename):
@@ -297,13 +294,15 @@ def migrate(ctx, migration_app_name):
 
 def get_migrate_command(host, repo, app_key, migration_app_name):
     if migration_app_name == None:
-        # TODO: do we need to quote(repo.encode('utf-8')) at all?
+        # no need to quote repo because we restrict what is allowed, but might be best practice to do so
         r = requests.get("%s/api/apps/%s/releases/migrate-command" % (host, repo), auth = (repo, app_key), headers = {
             'Content-Type': 'application/json',
         }) 
     else:
-        r = requests.get("%s/api/apps/%s/releases/migrate-command?migration_app_name=%s" % (host, repo, quote(migration_app_name.encode('utf-8'))), auth = (repo, app_key), headers = {
+        r = requests.get("%s/api/apps/%s/releases/migrate-command" % (host, repo), auth = (repo, app_key), headers = {
             'Content-Type': 'application/json',
+        }, params={
+            'migration_app_name': migration_app_name,
         }) 
     if r.status_code != 200:
         raise Exception(r)
@@ -389,10 +388,10 @@ def generate_vmargs(node_name, cookie):
     template_path = os.path.join(script_dir, rel_path)
     vmargs_path = "/release-config/vm.args"
 
-    with open(template_path, "r") as f:
+    with open(template_path, "r", encoding='utf8') as f:
         template = f.read()
         vmargs = pystache.render(template, {"MY_NODE_NAME": node_name, "MY_COOKIE": cookie})
-        with open(vmargs_path, "w") as g:
+        with open(vmargs_path, "w", encoding='utf8') as g:
             g.write(vmargs)
 
 @cli.command()
@@ -536,10 +535,10 @@ def upgrade(ctx, version):
     cloud = release["cloud"]
     if cloud == "gcp":
         # https://storage.googleapis.com/slug-bucket/production/bar/releases/HEAD/SHA/UUID/app.tar.gz
-        mix_version = urlparse.urlparse(slug_url).path.split('/')[5]
+        mix_version = urlparse(slug_url).path.split('/')[5]
     elif cloud == "aws":
         # https://gigalixir-slugs-west.s3-us-west-2.amazonaws.com/production/bar-west/releases/HEAD/SHA/UUID/app.tar.gz
-        mix_version = urlparse.urlparse(slug_url).path.split('/')[4]
+        mix_version = urlparse(slug_url).path.split('/')[4]
     else:
         raise Exception("Unknown cloud: %s" % cloud)
 
@@ -564,6 +563,8 @@ def upgrade(ctx, version):
 
 def load_configs(release):
     config = release["config"]
+
+    # is this line needed now that we set it in the Dockerfile?
     os.environ['LC_ALL'] = "en_US.UTF-8"
     os.environ.update(encode_dict(config, 'utf-8'))
 
@@ -737,13 +738,8 @@ def load_profile():
         source(f)
 
 def encode_dict(d, encoding):
-    """assumes all keys and values are unicode values (python2)"""
-    ret = {}
-    for key, value in d.iteritems():
-        k = key.encode(encoding)
-        v = value.encode(encoding)
-        ret[k] = v
-    return ret
+    """do not need to do anything for python3"""
+    return d
 
 # from https://stackoverflow.com/a/7198338/365377
 def source(script):
@@ -761,7 +757,7 @@ def source(script):
 
 def log(logplex_token, appname, hostname, line):
     read, write = os.pipe()
-    os.write(write, line)
+    os.write(write, line.encode('utf-8'))
     os.close(write)
 
     procid = "gigalixir-run"
@@ -770,6 +766,7 @@ def log(logplex_token, appname, hostname, line):
 
 def download_file(url, local_filename):
     # NOTE the stream=True parameter
+    # NOTE no encodings because we use raw bytes for both reading and writing
     r = requests.get(url, stream=True)
     with open(local_filename, 'wb') as f:
         for chunk in r.iter_content(chunk_size=1024): 
@@ -812,7 +809,8 @@ def start_ssh(repo, app_key):
     subprocess.check_call(['/bin/bash', '-c', update_authorized_keys_cmd])
 
     p = subprocess.Popen(['crontab'], stdin=subprocess.PIPE)
-    p.communicate("* * * * * %s && echo $(date) >> /var/log/cron.log\n" % update_authorized_keys_cmd)
+    cron_cmd = "* * * * * %s && echo $(date) >> /var/log/cron.log\n" % update_authorized_keys_cmd
+    p.communicate(cron_cmd.encode())
     p.stdin.close()
 
     subprocess.check_call(['cron'])
@@ -835,7 +833,6 @@ def get_hostname():
     return subprocess.check_output(["hostname"]).strip()
 
 def load_env_var(name):
-    name = name.encode('utf-8')
     if name in os.environ:
         return os.environ[name]
     else:
@@ -848,8 +845,8 @@ def load_env_var(name):
         if not os.path.exists(path):
             raise Exception("could not find %s in env or in /kube-env-vars" % name)
         else:
-            with open(path, 'r') as f:
-                value = f.read() #.decode("utf-8")
+            with open(path, 'r', encoding='utf8') as f:
+                value = f.read()
             return value
 
 
@@ -865,8 +862,8 @@ def load_secrets():
         break
     secrets = {}
     for key in f:
-        with open("/mnt/secrets/%s" % key, "r") as fh:
-            value = fh.read().decode("utf-8")
+        with open("/mnt/secrets/%s" % key, "r", encoding='utf8') as fh:
+            value = fh.read()
             secrets[key] = value
     os.environ.update(encode_dict(secrets, 'utf-8'))
 

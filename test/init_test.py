@@ -13,6 +13,7 @@ import httpretty
 import gigalixir_run
 import mock
 import functools
+import pytest
 
 # test job and distillery_job
 FOREMAN_START = [
@@ -21,11 +22,11 @@ FOREMAN_START = [
    mock.mock._Call(('getcwd().__str__', (), {})),
    # mock.call.path.exists("<MagicMock name='os.getcwd()' id='140584589842768'>/Procfile"),
    mock.call.path.exists(mock.ANY),
-   mock.call.path.exists().__nonzero__(),
+   mock.call.path.exists().__bool__(),
 ]
 PERSIST_ENV = [
    mock.call.path.exists('/kube-env-vars'),
-   mock.call.path.exists().__nonzero__(),
+   mock.call.path.exists().__bool__(),
 ]
 EXTRACT_FILE = [
    mock.call.getcwd(),
@@ -42,7 +43,7 @@ START_EPMD = [
 ]
 START_SSH = [
    mock.call.path.exists('/root/.ssh'),
-   mock.call.path.exists().__nonzero__(),
+   mock.call.path.exists().__bool__(),
 ]
 GENERATE_VMARGS = [
    # mock.call.path.dirname('/home/js/Development/gigalixir-run/gigalixir_run/__init__.pyc'),
@@ -52,6 +53,7 @@ GENERATE_VMARGS = [
    mock.mock._Call(('path.join().__eq__', ('/kube-env-vars/APP_KEY',), {})),
    mock.mock._Call(('path.join().__eq__', ('/kube-env-vars/ERLANG_COOKIE',), {})),
    mock.mock._Call(('path.join().__eq__', ('/kube-env-vars/LOGPLEX_TOKEN',), {})),
+   mock.mock._Call(('path.join().__eq__', ('/kube-env-vars/SECRET_KEY_BASE',), {})),
    mock.mock._Call(('path.join().__eq__', ('/kube-env-vars/APP',), {})),
    mock.mock._Call(('path.join().__eq__', ('/kube-env-vars/MY_POD_IP',), {})),
 ]
@@ -69,9 +71,9 @@ IS_DISTILLERY_FALSE = [
 ]
 IS_DISTILLERY_TRUE = [
    mock.call.path.isfile('/app/bin/fake-customer-app-name'),
-   # mock.call.path.isfile().__nonzero__(),
+   # mock.call.path.isfile().__bool__(),
    mock.call.access('/app/bin/fake-customer-app-name', os.X_OK),
-   mock.call.access().__nonzero__(),
+   mock.call.access().__bool__(),
 ]
 EXIT_APP_FOLDER = [
    # mock.call.chdir(<MagicMock name='os.getcwd()' id='140584589842768'>)
@@ -94,6 +96,8 @@ def mocked_open_fn(app_name):
             return mock.mock_open(read_data="fake-cookie").return_value
         elif args == ("/kube-env-vars/LOGPLEX_TOKEN", 'r'):
             return mock.mock_open(read_data="fake-logplex-token").return_value
+        elif args == ("/kube-env-vars/SECRET_KEY_BASE", 'r'):
+            return mock.mock_open(read_data="fake-secret-key-base").return_value
         elif args == ("/kube-env-vars/APP", 'r'):
             return mock.mock_open(read_data="fake-customer-app-name").return_value
         elif args == ("/kube-env-vars/MY_POD_IP", 'r'):
@@ -120,6 +124,7 @@ def mocked_requests_get(*args, **kwargs):
         return MockResponse({"data": {
             "slug_url": "https://storage.googleapis.com/slug-bucket/production/sunny-wellgroomed-africanpiedkingfisher/releases/0.0.2/SHA/gigalixir_getting_started.tar.gz",
             "customer_app_name": "fake-customer-app-name",
+            "cloud": "gcp",
             "config": {
                 "DATABASE_URL": "fake-database-url",
                 "FOO": """1
@@ -197,12 +202,15 @@ def test_mix_init(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
         
         # set once for Click and once for gigalixir_run
         os.environ['LOGPLEX_TOKEN'] = 'fake-logplex-token'
+        os.environ['SECRET_KEY_BASE'] = 'fake-secret-key-base'
         os.environ['ERLANG_COOKIE'] = 'fake-cookie'
         os.environ['MY_POD_IP'] = '1.2.3.4'
         my_env['LOGPLEX_TOKEN'] = 'fake-logplex-token'
+        my_env['SECRET_KEY_BASE'] = 'fake-secret-key-base'
         my_env['ERLANG_COOKIE'] = 'fake-cookie'
         my_env['MY_POD_IP'] = '1.2.3.4'
         my_env['HOSTNAME'] = 'host1'
+
 
         result = runner.invoke(gigalixir_run.cli, ['init', 'my_app', 'foreground'])
         assert result.output == ''
@@ -220,6 +228,10 @@ def test_mix_init(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
             'MY_NODE_NAME': 'my_app@1.2.3.4', 
             'ERLANG_COOKIE': 'fake-cookie', 
             'LC_ALL': 'en_US.UTF-8', 
+            'LIBCLUSTER_KUBERNETES_NODE_BASENAME': 'my_app',
+            'LIBCLUSTER_KUBERNETES_SELECTOR': 'repo=my_app',
+            'RELEASE_COOKIE': 'fake-cookie',
+            'SECRET_KEY_BASE': 'fake-secret-key-base',
             'FOO': '1\n2', 
             'PORT': '4000', 
             'LOGPLEX_TOKEN': 'fake-logplex-token', 
@@ -249,18 +261,18 @@ def test_mix_init(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
         assert mock_subprocess.mock_calls == [
             mock.call.check_call(['/bin/bash', '-c', u"curl https://api.gigalixir.com/api/apps/my_app/ssh_keys -u my_app:fake-app-key | jq -r '.data | .[]' > /root/.ssh/authorized_keys"]),
             mock.call.Popen(['crontab'], stdin=stdin),
-            mock.call.Popen().communicate(u"* * * * * curl https://api.gigalixir.com/api/apps/my_app/ssh_keys -u my_app:fake-app-key | jq -r '.data | .[]' > /root/.ssh/authorized_keys && echo $(date) >> /var/log/cron.log\n"),
+            mock.call.Popen().communicate(b"* * * * * curl https://api.gigalixir.com/api/apps/my_app/ssh_keys -u my_app:fake-app-key | jq -r '.data | .[]' > /root/.ssh/authorized_keys && echo $(date) >> /var/log/cron.log\n"),
             mock.call.Popen().stdin.close(),
             mock.call.check_call(['cron']),
             mock.call.check_call(['service', 'ssh', 'start']),
             mock.call.check_output(['hostname']),
             mock.call.check_output().strip(),
-            mock.mock._Call(('check_output().strip().__unicode__', (), {})),
-            mock.mock._Call(('check_output().strip().__unicode__', (), {})),
+            mock.mock._Call(('check_output().strip().__str__', (), {})),
+            mock.mock._Call(('check_output().strip().__str__', (), {})),
             mock.call.check_call(['/opt/gigalixir/bin/log-shuttle', '-logs-url=http://token:fake-logplex-token@post.logs.gigalixir.com/logs', '-appname', 'my_app', '-hostname', mock.ANY, mock.ANY, mock.ANY, '-procid', 'gigalixir-run'], stdin=pipe_read),
             mock.call.Popen(['foreman', 'start', '-d', '.', '--color', '--no-timestamp', '-f', 'Procfile'], stdout=stdin),
-            mock.mock._Call(('check_output().strip().__unicode__', (), {})),
-            mock.mock._Call(('check_output().strip().__unicode__', (), {})),
+            mock.mock._Call(('check_output().strip().__str__', (), {})),
+            mock.mock._Call(('check_output().strip().__str__', (), {})),
             # -hostname and -procid have 3 mock.ANYs behind it because
             # the string representation of MagicMock is broken into
             # 3 strings.. ugly.
@@ -275,12 +287,13 @@ def test_mix_init(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
         ]
 
         assert mock_open.mock_calls == [
-            mock.call('/kube-env-vars/MY_POD_IP', 'w'),
-            mock.call('/kube-env-vars/ERLANG_COOKIE', 'w'),
-            mock.call('/kube-env-vars/REPO', 'w'),
-            mock.call('/kube-env-vars/APP', 'w'),
-            mock.call('/kube-env-vars/APP_KEY', 'w'),
-            mock.call('/kube-env-vars/LOGPLEX_TOKEN', 'w'),
+            mock.call('/kube-env-vars/MY_POD_IP', 'w', encoding='utf8'),
+            mock.call('/kube-env-vars/ERLANG_COOKIE', 'w', encoding='utf8'),
+            mock.call('/kube-env-vars/REPO', 'w', encoding='utf8'),
+            mock.call('/kube-env-vars/APP', 'w', encoding='utf8'),
+            mock.call('/kube-env-vars/APP_KEY', 'w', encoding='utf8'),
+            mock.call('/kube-env-vars/LOGPLEX_TOKEN', 'w', encoding='utf8'),
+            mock.call('/kube-env-vars/SECRET_KEY_BASE', 'w', encoding='utf8'),
             mock.call('/app/fake-customer-app-name.tar.gz', 'wb'),
 
             # no vmargs generated for mix
@@ -319,9 +332,11 @@ def test_distillery_init(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_
         
         # set once for Click and once for gigalixir_run
         os.environ['LOGPLEX_TOKEN'] = 'fake-logplex-token'
+        os.environ['SECRET_KEY_BASE'] = 'fake-secret-key-base'
         os.environ['ERLANG_COOKIE'] = 'fake-cookie'
         os.environ['MY_POD_IP'] = '1.2.3.4'
         my_env['LOGPLEX_TOKEN'] = 'fake-logplex-token'
+        my_env['SECRET_KEY_BASE'] = 'fake-secret-key-base'
         my_env['ERLANG_COOKIE'] = 'fake-cookie'
         my_env['MY_POD_IP'] = '1.2.3.4'
         my_env['HOSTNAME'] = 'host1'
@@ -341,6 +356,8 @@ def test_distillery_init(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_
             'RELX_REPLACE_OS_VARS': 'true', 
             'LIBCLUSTER_KUBERNETES_NODE_BASENAME': 'my_app', 
             'LIBCLUSTER_KUBERNETES_SELECTOR': 'repo=my_app', 
+            'RELEASE_COOKIE': 'fake-cookie',
+            'SECRET_KEY_BASE': 'fake-secret-key-base',
             'MY_POD_IP': '1.2.3.4', 
             'DATABASE_URL': 'fake-database-url', 
             'MY_COOKIE': 'fake-cookie', 
@@ -378,18 +395,18 @@ def test_distillery_init(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_
         assert mock_subprocess.mock_calls == [
             mock.call.check_call(['/bin/bash', '-c', u"curl https://api.gigalixir.com/api/apps/my_app/ssh_keys -u my_app:fake-app-key | jq -r '.data | .[]' > /root/.ssh/authorized_keys"]),
             mock.call.Popen(['crontab'], stdin=stdin),
-            mock.call.Popen().communicate(u"* * * * * curl https://api.gigalixir.com/api/apps/my_app/ssh_keys -u my_app:fake-app-key | jq -r '.data | .[]' > /root/.ssh/authorized_keys && echo $(date) >> /var/log/cron.log\n"),
+            mock.call.Popen().communicate(b"* * * * * curl https://api.gigalixir.com/api/apps/my_app/ssh_keys -u my_app:fake-app-key | jq -r '.data | .[]' > /root/.ssh/authorized_keys && echo $(date) >> /var/log/cron.log\n"),
             mock.call.Popen().stdin.close(),
             mock.call.check_call(['cron']),
             mock.call.check_call(['service', 'ssh', 'start']),
             mock.call.check_output(['hostname']),
             mock.call.check_output().strip(),
-            mock.mock._Call(('check_output().strip().__unicode__', (), {})),
-            mock.mock._Call(('check_output().strip().__unicode__', (), {})),
+            mock.mock._Call(('check_output().strip().__str__', (), {})),
+            mock.mock._Call(('check_output().strip().__str__', (), {})),
             mock.call.check_call(['/opt/gigalixir/bin/log-shuttle', '-logs-url=http://token:fake-logplex-token@post.logs.gigalixir.com/logs', '-appname', 'my_app', '-hostname', mock.ANY, mock.ANY, mock.ANY, '-procid', 'gigalixir-run'], stdin=pipe_read),
             mock.call.Popen(['foreman', 'start', '-d', '.', '--color', '--no-timestamp', '-f', 'Procfile'], stdout=stdin),
-            mock.mock._Call(('check_output().strip().__unicode__', (), {})),
-            mock.mock._Call(('check_output().strip().__unicode__', (), {})),
+            mock.mock._Call(('check_output().strip().__str__', (), {})),
+            mock.mock._Call(('check_output().strip().__str__', (), {})),
             # -hostname and -procid have 3 mock.ANYs behind it because
             # the string representation of MagicMock is broken into
             # 3 strings.. ugly.
@@ -404,18 +421,19 @@ def test_distillery_init(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_
         ]
 
         assert mock_open.mock_calls == [
-            mock.call('/kube-env-vars/MY_POD_IP', 'w'),
-            mock.call('/kube-env-vars/ERLANG_COOKIE', 'w'),
-            mock.call('/kube-env-vars/REPO', 'w'),
-            mock.call('/kube-env-vars/APP', 'w'),
-            mock.call('/kube-env-vars/APP_KEY', 'w'),
-            mock.call('/kube-env-vars/LOGPLEX_TOKEN', 'w'),
+            mock.call('/kube-env-vars/MY_POD_IP', 'w', encoding='utf8'),
+            mock.call('/kube-env-vars/ERLANG_COOKIE', 'w', encoding='utf8'),
+            mock.call('/kube-env-vars/REPO', 'w', encoding='utf8'),
+            mock.call('/kube-env-vars/APP', 'w', encoding='utf8'),
+            mock.call('/kube-env-vars/APP_KEY', 'w', encoding='utf8'),
+            mock.call('/kube-env-vars/LOGPLEX_TOKEN', 'w', encoding='utf8'),
+            mock.call('/kube-env-vars/SECRET_KEY_BASE', 'w', encoding='utf8'),
             mock.call('/app/fake-customer-app-name.tar.gz', 'wb'),
 
             # generate_vmargs
             # mock.call(<MagicMock name='os.path.join()' id='139897244298064'>, 'r'),
-            mock.call(mock.ANY, 'r'),
-            mock.call('/release-config/vm.args', 'w'),
+            mock.call(mock.ANY, 'r', encoding='utf8'),
+            mock.call('/release-config/vm.args', 'w', encoding='utf8'),
         ]
 
 @mock.patch('gigalixir_run.open', side_effect=mocked_open_fn("my_custom_vmargs_app"))
@@ -447,9 +465,11 @@ def test_custom_vmargs_init(mock_tarfile, mock_os, mock_subprocess, mock_get, mo
         
         # set once for Click and once for gigalixir_run
         os.environ['LOGPLEX_TOKEN'] = 'fake-logplex-token'
+        os.environ['SECRET_KEY_BASE'] = 'fake-secret-key-base'
         os.environ['ERLANG_COOKIE'] = 'fake-cookie'
         os.environ['MY_POD_IP'] = '1.2.3.4'
         my_env['LOGPLEX_TOKEN'] = 'fake-logplex-token'
+        my_env['SECRET_KEY_BASE'] = 'fake-secret-key-base'
         my_env['ERLANG_COOKIE'] = 'fake-cookie'
         my_env['MY_POD_IP'] = '1.2.3.4'
         my_env['HOSTNAME'] = 'host1'
@@ -469,6 +489,8 @@ def test_custom_vmargs_init(mock_tarfile, mock_os, mock_subprocess, mock_get, mo
             'RELX_REPLACE_OS_VARS': 'true', 
             'LIBCLUSTER_KUBERNETES_NODE_BASENAME': 'my_custom_vmargs_app', 
             'LIBCLUSTER_KUBERNETES_SELECTOR': 'repo=my_custom_vmargs_app', 
+            'RELEASE_COOKIE': 'fake-cookie',
+            'SECRET_KEY_BASE': 'fake-secret-key-base',
             'MY_POD_IP': '1.2.3.4', 
             'DATABASE_URL': 'fake-database-url', 
             'MY_COOKIE': 'fake-cookie', 
@@ -507,18 +529,18 @@ def test_custom_vmargs_init(mock_tarfile, mock_os, mock_subprocess, mock_get, mo
         assert mock_subprocess.mock_calls == [
             mock.call.check_call(['/bin/bash', '-c', u"curl https://api.gigalixir.com/api/apps/my_custom_vmargs_app/ssh_keys -u my_custom_vmargs_app:fake-app-key | jq -r '.data | .[]' > /root/.ssh/authorized_keys"]),
             mock.call.Popen(['crontab'], stdin=stdin),
-            mock.call.Popen().communicate(u"* * * * * curl https://api.gigalixir.com/api/apps/my_custom_vmargs_app/ssh_keys -u my_custom_vmargs_app:fake-app-key | jq -r '.data | .[]' > /root/.ssh/authorized_keys && echo $(date) >> /var/log/cron.log\n"),
+            mock.call.Popen().communicate(b"* * * * * curl https://api.gigalixir.com/api/apps/my_custom_vmargs_app/ssh_keys -u my_custom_vmargs_app:fake-app-key | jq -r '.data | .[]' > /root/.ssh/authorized_keys && echo $(date) >> /var/log/cron.log\n"),
             mock.call.Popen().stdin.close(),
             mock.call.check_call(['cron']),
             mock.call.check_call(['service', 'ssh', 'start']),
             mock.call.check_output(['hostname']),
             mock.call.check_output().strip(),
-            mock.mock._Call(('check_output().strip().__unicode__', (), {})),
-            mock.mock._Call(('check_output().strip().__unicode__', (), {})),
+            mock.mock._Call(('check_output().strip().__str__', (), {})),
+            mock.mock._Call(('check_output().strip().__str__', (), {})),
             mock.call.check_call(['/opt/gigalixir/bin/log-shuttle', '-logs-url=http://token:fake-logplex-token@post.logs.gigalixir.com/logs', '-appname', 'my_custom_vmargs_app', '-hostname', mock.ANY, mock.ANY, mock.ANY, '-procid', 'gigalixir-run'], stdin=pipe_read),
             mock.call.Popen(['foreman', 'start', '-d', '.', '--color', '--no-timestamp', '-f', 'Procfile'], stdout=stdin),
-            mock.mock._Call(('check_output().strip().__unicode__', (), {})),
-            mock.mock._Call(('check_output().strip().__unicode__', (), {})),
+            mock.mock._Call(('check_output().strip().__str__', (), {})),
+            mock.mock._Call(('check_output().strip().__str__', (), {})),
             # -hostname and -procid have 3 mock.ANYs behind it because
             # the string representation of MagicMock is broken into
             # 3 strings.. ugly.
@@ -533,12 +555,13 @@ def test_custom_vmargs_init(mock_tarfile, mock_os, mock_subprocess, mock_get, mo
         ]
 
         assert mock_open.mock_calls == [
-            mock.call('/kube-env-vars/MY_POD_IP', 'w'),
-            mock.call('/kube-env-vars/ERLANG_COOKIE', 'w'),
-            mock.call('/kube-env-vars/REPO', 'w'),
-            mock.call('/kube-env-vars/APP', 'w'),
-            mock.call('/kube-env-vars/APP_KEY', 'w'),
-            mock.call('/kube-env-vars/LOGPLEX_TOKEN', 'w'),
+            mock.call('/kube-env-vars/MY_POD_IP', 'w', encoding='utf8'),
+            mock.call('/kube-env-vars/ERLANG_COOKIE', 'w', encoding='utf8'),
+            mock.call('/kube-env-vars/REPO', 'w', encoding='utf8'),
+            mock.call('/kube-env-vars/APP', 'w', encoding='utf8'),
+            mock.call('/kube-env-vars/APP_KEY', 'w', encoding='utf8'),
+            mock.call('/kube-env-vars/LOGPLEX_TOKEN', 'w', encoding='utf8'),
+            mock.call('/kube-env-vars/SECRET_KEY_BASE', 'w', encoding='utf8'),
             mock.call('/app/fake-customer-app-name.tar.gz', 'wb'),
         ]
 
@@ -582,6 +605,10 @@ def test_run_mix_remote_console(mock_tarfile, mock_os, mock_subprocess, mock_get
             'MY_NODE_NAME': 'my_app@1.2.3.4', 
             # 'ERLANG_COOKIE': 'fake-cookie', 
             'LC_ALL': 'en_US.UTF-8', 
+            'LIBCLUSTER_KUBERNETES_NODE_BASENAME': 'my_app',
+            'LIBCLUSTER_KUBERNETES_SELECTOR': 'repo=my_app',
+            'RELEASE_COOKIE': 'fake-cookie',
+            'SECRET_KEY_BASE': 'fake-secret-key-base',
             'FOO': '1\n2', 
             # 'PORT': '4000', 
             # 'LOGPLEX_TOKEN': '', 
@@ -593,15 +620,17 @@ def test_run_mix_remote_console(mock_tarfile, mock_os, mock_subprocess, mock_get
         assert mock_os.mock_calls == [
             # load_env_var REPO
             mock.call.path.exists('/kube-env-vars/REPO'),
-            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists().__bool__(),
             mock.call.path.exists('/kube-env-vars/APP_KEY'),
-            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists().__bool__(),
             mock.call.path.exists('/kube-env-vars/MY_POD_IP'),
-            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists().__bool__(),
             mock.call.path.exists('/kube-env-vars/LOGPLEX_TOKEN'),
-            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists().__bool__(),
             mock.call.path.exists('/kube-env-vars/ERLANG_COOKIE'),
-            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists().__bool__(),
+            mock.call.path.exists('/kube-env-vars/SECRET_KEY_BASE'),
+            mock.call.path.exists().__bool__(),
         ] + IS_DISTILLERY_FALSE + [
         ] + ENTER_APP_FOLDER + [
         ] + IS_DISTILLERY_FALSE + [
@@ -620,11 +649,12 @@ def test_run_mix_remote_console(mock_tarfile, mock_os, mock_subprocess, mock_get
         ]
 
         assert mock_open.mock_calls == [
-            mock.call('/kube-env-vars/REPO', 'r'),
-            mock.call('/kube-env-vars/APP_KEY', 'r'),
-            mock.call('/kube-env-vars/MY_POD_IP', 'r'),
-            mock.call('/kube-env-vars/LOGPLEX_TOKEN', 'r'),
-            mock.call('/kube-env-vars/ERLANG_COOKIE', 'r'),
+            mock.call('/kube-env-vars/REPO', 'r', encoding='utf8'),
+            mock.call('/kube-env-vars/APP_KEY', 'r', encoding='utf8'),
+            mock.call('/kube-env-vars/MY_POD_IP', 'r', encoding='utf8'),
+            mock.call('/kube-env-vars/LOGPLEX_TOKEN', 'r', encoding='utf8'),
+            mock.call('/kube-env-vars/ERLANG_COOKIE', 'r', encoding='utf8'),
+            mock.call('/kube-env-vars/SECRET_KEY_BASE', 'r', encoding='utf8'),
             # generate_vmargs not needed for mix mode
             # mock.call(<MagicMock name='os.path.join()' id='139897244298064'>, 'r'),
             # mock.call(mock.ANY, 'r'),
@@ -675,6 +705,8 @@ def test_run_distillery_remote_console(mock_tarfile, mock_os, mock_subprocess, m
             'RELEASE_DISTRIBUTION': 'name',
             # 'ERLANG_COOKIE': 'fake-cookie', 
             'LC_ALL': 'en_US.UTF-8', 
+            'RELEASE_COOKIE': 'fake-cookie',
+            'SECRET_KEY_BASE': 'fake-secret-key-base',
             'FOO': '1\n2', 
             # 'PORT': '4000', 
             # 'LOGPLEX_TOKEN': '', 
@@ -687,15 +719,17 @@ def test_run_distillery_remote_console(mock_tarfile, mock_os, mock_subprocess, m
         assert mock_os.mock_calls == [
             # load_env_var REPO
             mock.call.path.exists('/kube-env-vars/REPO'),
-            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists().__bool__(),
             mock.call.path.exists('/kube-env-vars/APP_KEY'),
-            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists().__bool__(),
             mock.call.path.exists('/kube-env-vars/MY_POD_IP'),
-            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists().__bool__(),
             mock.call.path.exists('/kube-env-vars/LOGPLEX_TOKEN'),
-            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists().__bool__(),
             mock.call.path.exists('/kube-env-vars/ERLANG_COOKIE'),
-            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists().__bool__(),
+            mock.call.path.exists('/kube-env-vars/SECRET_KEY_BASE'),
+            mock.call.path.exists().__bool__(),
         ] + IS_DISTILLERY_TRUE + [
         ] + ENTER_APP_FOLDER + [
         ] + IS_DISTILLERY_TRUE + [
@@ -714,15 +748,16 @@ def test_run_distillery_remote_console(mock_tarfile, mock_os, mock_subprocess, m
         ]
 
         assert mock_open.mock_calls == [
-            mock.call('/kube-env-vars/REPO', 'r'),
-            mock.call('/kube-env-vars/APP_KEY', 'r'),
-            mock.call('/kube-env-vars/MY_POD_IP', 'r'),
-            mock.call('/kube-env-vars/LOGPLEX_TOKEN', 'r'),
-            mock.call('/kube-env-vars/ERLANG_COOKIE', 'r'),
+            mock.call('/kube-env-vars/REPO', 'r', encoding='utf8'),
+            mock.call('/kube-env-vars/APP_KEY', 'r', encoding='utf8'),
+            mock.call('/kube-env-vars/MY_POD_IP', 'r', encoding='utf8'),
+            mock.call('/kube-env-vars/LOGPLEX_TOKEN', 'r', encoding='utf8'),
+            mock.call('/kube-env-vars/ERLANG_COOKIE', 'r', encoding='utf8'),
+            mock.call('/kube-env-vars/SECRET_KEY_BASE', 'r', encoding='utf8'),
             # generate_vmargs not needed for remote_console
             # mock.call(<MagicMock name='os.path.join()' id='139897244298064'>, 'r'),
-            mock.call(mock.ANY, 'r'),
-            mock.call('/release-config/vm.args', 'w')
+            mock.call(mock.ANY, 'r', encoding='utf8'),
+            mock.call('/release-config/vm.args', 'w', encoding='utf8')
         ]
 
 @mock.patch('gigalixir_run.open', side_effect=mocked_open_fn("my_app"))
@@ -763,14 +798,14 @@ def test_upgrade(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
         assert mock_os.mock_calls == [
             # load_env_var REPO
             mock.call.path.exists('/kube-env-vars/APP'),
-            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists().__bool__(),
             mock.call.path.exists('/kube-env-vars/REPO'),
-            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists().__bool__(),
             mock.call.path.exists('/kube-env-vars/APP_KEY'),
-            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists().__bool__(),
         ] + IS_DISTILLERY_TRUE + [
             mock.call.path.exists('/app/releases/0.0.2'),
-            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists().__bool__(),
             # enter release folder
             mock.call.getcwd(),
             mock.call.path.expanduser('/app/releases/0.0.2'),
@@ -781,11 +816,13 @@ def test_upgrade(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
             mock.call.chdir(mock.ANY),
 
             mock.call.path.exists('/kube-env-vars/LOGPLEX_TOKEN'),
-            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists().__bool__(),
             mock.call.path.exists('/kube-env-vars/MY_POD_IP'),
-            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists().__bool__(),
             mock.call.path.exists('/kube-env-vars/ERLANG_COOKIE'),
-            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists().__bool__(),
+            mock.call.path.exists('/kube-env-vars/SECRET_KEY_BASE'),
+            mock.call.path.exists().__bool__(),
         ] + IS_DISTILLERY_TRUE + [
         ] + ENTER_APP_FOLDER + [
         ] + LOG_MESSAGE + [
@@ -812,18 +849,19 @@ def test_upgrade(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
         ]
 
         assert mock_open.mock_calls == [
-            mock.call('/kube-env-vars/APP', 'r'),
-            mock.call('/kube-env-vars/REPO', 'r'),
-            mock.call('/kube-env-vars/APP_KEY', 'r'),
+            mock.call('/kube-env-vars/APP', 'r', encoding='utf8'),
+            mock.call('/kube-env-vars/REPO', 'r', encoding='utf8'),
+            mock.call('/kube-env-vars/APP_KEY', 'r', encoding='utf8'),
             mock.call('/app/releases/0.0.2/fake-customer-app-name.tar.gz', 'wb'),
-            mock.call('/kube-env-vars/LOGPLEX_TOKEN', 'r'),
-            mock.call('/kube-env-vars/MY_POD_IP', 'r'),
-            mock.call('/kube-env-vars/ERLANG_COOKIE', 'r'),
+            mock.call('/kube-env-vars/LOGPLEX_TOKEN', 'r', encoding='utf8'),
+            mock.call('/kube-env-vars/MY_POD_IP', 'r', encoding='utf8'),
+            mock.call('/kube-env-vars/ERLANG_COOKIE', 'r', encoding='utf8'),
+            mock.call('/kube-env-vars/SECRET_KEY_BASE', 'r', encoding='utf8'),
 
             # generate_vmargs
             # mock.call(<MagicMock name='os.path.join()' id='139897244298064'>, 'r'),
-            mock.call(mock.ANY, 'r'),
-            mock.call('/release-config/vm.args', 'w'),
+            mock.call(mock.ANY, 'r', encoding='utf8'),
+            mock.call('/release-config/vm.args', 'w', encoding='utf8'),
         ]
 
         assert my_env == {
@@ -841,6 +879,8 @@ def test_upgrade(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
             'MY_NODE_NAME': 'my_app@1.2.3.4', 
             # 'ERLANG_COOKIE': 'fake-cookie', 
             'LC_ALL': 'en_US.UTF-8', 
+            'RELEASE_COOKIE': 'fake-cookie',
+            'SECRET_KEY_BASE': 'fake-secret-key-base',
             'FOO': '1\n2', 
             # 'PORT': '4000', 
             # 'LOGPLEX_TOKEN': '', 
@@ -929,15 +969,17 @@ def test_run_mix_shell(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_op
         assert mock_os.mock_calls == [
             # load_env_var REPO
             mock.call.path.exists('/kube-env-vars/REPO'),
-            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists().__bool__(),
             mock.call.path.exists('/kube-env-vars/APP_KEY'),
-            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists().__bool__(),
             mock.call.path.exists('/kube-env-vars/MY_POD_IP'),
-            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists().__bool__(),
             mock.call.path.exists('/kube-env-vars/LOGPLEX_TOKEN'),
-            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists().__bool__(),
             mock.call.path.exists('/kube-env-vars/ERLANG_COOKIE'),
-            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists().__bool__(),
+            mock.call.path.exists('/kube-env-vars/SECRET_KEY_BASE'),
+            mock.call.path.exists().__bool__(),
         ] + IS_DISTILLERY_FALSE + [
         ] + ENTER_APP_FOLDER + [
         ] + IS_DISTILLERY_FALSE + [
@@ -955,11 +997,12 @@ def test_run_mix_shell(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_op
         ]
 
         assert mock_open.mock_calls == [
-            mock.call('/kube-env-vars/REPO', 'r'),
-            mock.call('/kube-env-vars/APP_KEY', 'r'),
-            mock.call('/kube-env-vars/MY_POD_IP', 'r'),
-            mock.call('/kube-env-vars/LOGPLEX_TOKEN', 'r'),
-            mock.call('/kube-env-vars/ERLANG_COOKIE', 'r'),
+            mock.call('/kube-env-vars/REPO', 'r', encoding='utf8'),
+            mock.call('/kube-env-vars/APP_KEY', 'r', encoding='utf8'),
+            mock.call('/kube-env-vars/MY_POD_IP', 'r', encoding='utf8'),
+            mock.call('/kube-env-vars/LOGPLEX_TOKEN', 'r', encoding='utf8'),
+            mock.call('/kube-env-vars/ERLANG_COOKIE', 'r', encoding='utf8'),
+            mock.call('/kube-env-vars/SECRET_KEY_BASE', 'r', encoding='utf8'),
         ]
 
         assert my_env == {
@@ -972,6 +1015,10 @@ def test_run_mix_shell(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_op
             'MY_NODE_NAME': 'my_app@1.2.3.4', 
             # 'ERLANG_COOKIE': 'fake-cookie', 
             'LC_ALL': 'en_US.UTF-8', 
+            'LIBCLUSTER_KUBERNETES_NODE_BASENAME': 'my_app',
+            'LIBCLUSTER_KUBERNETES_SELECTOR': 'repo=my_app',
+            'RELEASE_COOKIE': 'fake-cookie',
+            'SECRET_KEY_BASE': 'fake-secret-key-base',
             'FOO': '1\n2', 
             # 'PORT': '4000', 
         }
@@ -1021,6 +1068,10 @@ def test_mix_job(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
             'MY_NODE_NAME': 'my_app@1.2.3.4', 
             'ERLANG_COOKIE': 'fake-cookie', 
             'LC_ALL': 'en_US.UTF-8', 
+            'LIBCLUSTER_KUBERNETES_NODE_BASENAME': 'my_app',
+            'LIBCLUSTER_KUBERNETES_SELECTOR': 'repo=my_app',
+            'RELEASE_COOKIE': 'fake-cookie',
+            'SECRET_KEY_BASE': 'fake-secret-key-base',
             'FOO': '1\n2', 
             'LOGPLEX_TOKEN': 'fake-logplex-token', 
         }
@@ -1033,6 +1084,8 @@ def test_mix_job(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
 
         assert mock_os.mock_calls == [
         ] + EXTRACT_FILE + [
+            mock.call.path.exists('/kube-env-vars/SECRET_KEY_BASE'),
+            mock.call.path.exists().__bool__(),
         ] + IS_DISTILLERY_FALSE + [
         ] + ENTER_APP_FOLDER + [
         ] + LOG_MESSAGE + [
@@ -1062,6 +1115,7 @@ def test_mix_job(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_open):
 
         assert mock_open.mock_calls == [
             mock.call('/app/fake-customer-app-name.tar.gz', 'wb'),
+            mock.call('/kube-env-vars/SECRET_KEY_BASE', 'r', encoding='utf8'),
         ]
 
 @mock.patch('gigalixir_run.open', side_effect=mocked_open_fn("my_app"))
@@ -1115,6 +1169,8 @@ def test_distillery_job(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_o
             'MY_NODE_NAME': 'my_app@1.2.3.4', 
             'ERLANG_COOKIE': 'fake-cookie', 
             'LC_ALL': 'en_US.UTF-8', 
+            'RELEASE_COOKIE': 'fake-cookie',
+            'SECRET_KEY_BASE': 'fake-secret-key-base',
             'FOO': '1\n2', 
             'LOGPLEX_TOKEN': 'fake-logplex-token', 
         }
@@ -1128,6 +1184,8 @@ def test_distillery_job(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_o
         assert mock_os.mock_calls == [
         ] + EXTRACT_FILE + [
         ] + IS_DISTILLERY_TRUE + [
+            mock.call.path.exists('/kube-env-vars/SECRET_KEY_BASE'),
+            mock.call.path.exists().__bool__(),
         ] + IS_DISTILLERY_TRUE + [
         ] + ENTER_APP_FOLDER + [
         ] + LOG_MESSAGE + [
@@ -1157,10 +1215,11 @@ def test_distillery_job(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_o
 
         assert mock_open.mock_calls == [
             mock.call('/app/fake-customer-app-name.tar.gz', 'wb'),
+            mock.call('/kube-env-vars/SECRET_KEY_BASE', 'r', encoding='utf8'),
             # generate_vmargs
             # mock.call(<MagicMock name='os.path.join()' id='139897244298064'>, 'r'),
-            mock.call(mock.ANY, 'r'),
-            mock.call('/release-config/vm.args', 'w'),
+            mock.call(mock.ANY, 'r', encoding='utf8'),
+            mock.call('/release-config/vm.args', 'w', encoding='utf8'),
         ]
 
 @mock.patch('gigalixir_run.open', side_effect=mocked_open_fn("my_app"))
@@ -1207,6 +1266,8 @@ def test_distillery_eval(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_
             'MY_NODE_NAME': 'my_app@1.2.3.4', 
             # 'ERLANG_COOKIE': 'fake-cookie', 
             'LC_ALL': 'en_US.UTF-8', 
+            'RELEASE_COOKIE': 'fake-cookie',
+            'SECRET_KEY_BASE': 'fake-secret-key-base',
             'FOO': '1\n2', 
             # 'PORT': '4000', 
             # 'LOGPLEX_TOKEN': '', 
@@ -1219,18 +1280,20 @@ def test_distillery_eval(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_
         assert mock_os.mock_calls == [
             # load_env_var REPO
             mock.call.path.exists('/kube-env-vars/APP'),
-            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists().__bool__(),
         ] + IS_DISTILLERY_TRUE + [
             mock.call.path.exists('/kube-env-vars/REPO'),
-            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists().__bool__(),
             mock.call.path.exists('/kube-env-vars/APP_KEY'),
-            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists().__bool__(),
             mock.call.path.exists('/kube-env-vars/MY_POD_IP'),
-            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists().__bool__(),
             mock.call.path.exists('/kube-env-vars/LOGPLEX_TOKEN'),
-            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists().__bool__(),
             mock.call.path.exists('/kube-env-vars/ERLANG_COOKIE'),
-            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists().__bool__(),
+            mock.call.path.exists('/kube-env-vars/SECRET_KEY_BASE'),
+            mock.call.path.exists().__bool__(),
         ] + IS_DISTILLERY_TRUE + [
         ] + ENTER_APP_FOLDER + [
         ] + GENERATE_VMARGS + [
@@ -1249,16 +1312,17 @@ def test_distillery_eval(mock_tarfile, mock_os, mock_subprocess, mock_get, mock_
         ]
 
         assert mock_open.mock_calls == [
-            mock.call('/kube-env-vars/APP', 'r'),
-            mock.call('/kube-env-vars/REPO', 'r'),
-            mock.call('/kube-env-vars/APP_KEY', 'r'),
-            mock.call('/kube-env-vars/MY_POD_IP', 'r'),
-            mock.call('/kube-env-vars/LOGPLEX_TOKEN', 'r'),
-            mock.call('/kube-env-vars/ERLANG_COOKIE', 'r'),
+            mock.call('/kube-env-vars/APP', 'r', encoding='utf8'),
+            mock.call('/kube-env-vars/REPO', 'r', encoding='utf8'),
+            mock.call('/kube-env-vars/APP_KEY', 'r', encoding='utf8'),
+            mock.call('/kube-env-vars/MY_POD_IP', 'r', encoding='utf8'),
+            mock.call('/kube-env-vars/LOGPLEX_TOKEN', 'r', encoding='utf8'),
+            mock.call('/kube-env-vars/ERLANG_COOKIE', 'r', encoding='utf8'),
+            mock.call('/kube-env-vars/SECRET_KEY_BASE', 'r', encoding='utf8'),
             # generate_vmargs not needed for remote_console
             # mock.call(<MagicMock name='os.path.join()' id='139897244298064'>, 'r'),
-            mock.call(mock.ANY, 'r'),
-            mock.call('/release-config/vm.args', 'w')
+            mock.call(mock.ANY, 'r', encoding='utf8'),
+            mock.call('/release-config/vm.args', 'w', encoding='utf8')
         ]
 
 @mock.patch('gigalixir_run.open', side_effect=mocked_open_fn("distillery_2"))
@@ -1305,6 +1369,8 @@ def test_distillery_2_eval(mock_tarfile, mock_os, mock_subprocess, mock_get, moc
             'MY_NODE_NAME': 'distillery_2@1.2.3.4', 
             # 'ERLANG_COOKIE': 'fake-cookie', 
             'LC_ALL': 'en_US.UTF-8', 
+            'RELEASE_COOKIE': 'fake-cookie',
+            'SECRET_KEY_BASE': 'fake-secret-key-base',
             'FOO': '1\n2', 
             # 'PORT': '4000', 
             # 'LOGPLEX_TOKEN': '', 
@@ -1317,18 +1383,20 @@ def test_distillery_2_eval(mock_tarfile, mock_os, mock_subprocess, mock_get, moc
         assert mock_os.mock_calls == [
             # load_env_var REPO
             mock.call.path.exists('/kube-env-vars/APP'),
-            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists().__bool__(),
         ] + IS_DISTILLERY_TRUE + [
             mock.call.path.exists('/kube-env-vars/REPO'),
-            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists().__bool__(),
             mock.call.path.exists('/kube-env-vars/APP_KEY'),
-            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists().__bool__(),
             mock.call.path.exists('/kube-env-vars/MY_POD_IP'),
-            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists().__bool__(),
             mock.call.path.exists('/kube-env-vars/LOGPLEX_TOKEN'),
-            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists().__bool__(),
             mock.call.path.exists('/kube-env-vars/ERLANG_COOKIE'),
-            mock.call.path.exists().__nonzero__(),
+            mock.call.path.exists().__bool__(),
+            mock.call.path.exists('/kube-env-vars/SECRET_KEY_BASE'),
+            mock.call.path.exists().__bool__(),
         ] + IS_DISTILLERY_TRUE + [
         ] + ENTER_APP_FOLDER + [
         ] + GENERATE_VMARGS + [
@@ -1347,14 +1415,15 @@ def test_distillery_2_eval(mock_tarfile, mock_os, mock_subprocess, mock_get, moc
         ]
 
         assert mock_open.mock_calls == [
-            mock.call('/kube-env-vars/APP', 'r'),
-            mock.call('/kube-env-vars/REPO', 'r'),
-            mock.call('/kube-env-vars/APP_KEY', 'r'),
-            mock.call('/kube-env-vars/MY_POD_IP', 'r'),
-            mock.call('/kube-env-vars/LOGPLEX_TOKEN', 'r'),
-            mock.call('/kube-env-vars/ERLANG_COOKIE', 'r'),
+            mock.call('/kube-env-vars/APP', 'r', encoding='utf8'),
+            mock.call('/kube-env-vars/REPO', 'r', encoding='utf8'),
+            mock.call('/kube-env-vars/APP_KEY', 'r', encoding='utf8'),
+            mock.call('/kube-env-vars/MY_POD_IP', 'r', encoding='utf8'),
+            mock.call('/kube-env-vars/LOGPLEX_TOKEN', 'r', encoding='utf8'),
+            mock.call('/kube-env-vars/ERLANG_COOKIE', 'r', encoding='utf8'),
+            mock.call('/kube-env-vars/SECRET_KEY_BASE', 'r', encoding='utf8'),
             # generate_vmargs not needed for remote_console
             # mock.call(<MagicMock name='os.path.join()' id='139897244298064'>, 'r'),
-            mock.call(mock.ANY, 'r'),
-            mock.call('/release-config/vm.args', 'w')
+            mock.call(mock.ANY, 'r', encoding='utf8'),
+            mock.call('/release-config/vm.args', 'w', encoding='utf8')
         ]
