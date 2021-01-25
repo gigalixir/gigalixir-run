@@ -1,20 +1,20 @@
 FROM heroku/heroku:16
 
-RUN apt-get update && apt-get -y install jq python3-pip wkhtmltopdf pdftk xvfb
+# install python 3.8
+RUN apt-get update && apt-get install -y software-properties-common && add-apt-repository ppa:deadsnakes/ppa
+RUN apt-get update 
+RUN apt-get install -y build-essential python3.8 python3.8-dev python3.8-venv
 
-# ubuntu 16 specific stuff
-RUN apt-get update && apt-get -y install libssl-dev cron
-# end
+# install other packages
+RUN apt-get update && apt-get -y install jq wkhtmltopdf pdftk xvfb cron
 
-RUN pip3 install -U pip setuptools
+# install pip
+RUN curl https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py
+RUN python3.8 /tmp/get-pip.py
+
 RUN wget https://github.com/Yelp/dumb-init/releases/download/v1.2.0/dumb-init_1.2.0_amd64.deb
 RUN dpkg -i dumb-init_*.deb
 
-# I don't yet know why this is needed. Install pyOpenSSL
-# from setup.py fails with: No package 'libffi' found
-# but works here.
-RUN pip install pyOpenSSL
-RUN pip install virtualenv
 RUN gem install foreman
 
 # required by click on python3
@@ -32,7 +32,7 @@ RUN mkdir -p /app
 RUN sed -i 's$root:x:0:0:root:/root:/bin/bash$root:x:0:0:root:/app:/bin/bash$' /etc/passwd
 RUN mkdir -p /opt/gigalixir
 RUN mkdir -p /release-config
-RUN virtualenv /tmp/gigalixir
+RUN python3.8 -m venv /tmp/gigalixir
 RUN chmod og+x /tmp/gigalixir/bin/activate
 COPY etc/ssh/sshd_config /etc/ssh/sshd_config
 COPY bashrc /app/.bashrc
@@ -40,7 +40,7 @@ RUN cp /root/.profile /app/.profile
 ADD . /opt/gigalixir
 WORKDIR /opt/gigalixir
 
-RUN python3 setup.py install
+RUN python3.8 setup.py install
 WORKDIR /app
 
 
