@@ -37,10 +37,6 @@ setup(
             'mock~=3.0.5',
             'HTTPretty',
             'sure',
-
-            # needed to avoid error when installing, see
-            # https://stackoverflow.com/questions/34819221/why-is-python-setup-py-saying-invalid-command-bdist-wheel-on-travis-ci
-            # 'wheel',
         ],
     }
 
