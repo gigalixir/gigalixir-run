@@ -30,12 +30,8 @@ export LOGPLEX_TOKEN=""
 # for mix app
 
 ```
-gigalixir rollback -r 330 -a bar
-docker run --rm -P -e APP_KEY=$APP_KEY -e MY_POD_IP=127.0.0.1 -e ERLANG_COOKIE=123 -e LOGPLEX_TOKEN=$LOGPLEX_TOKEN -e REPO=bar gigalixir-run init bar foreground
-# for heroku-16, use
-docker run --rm -P -e APP_KEY=$APP_KEY -e MY_POD_IP=127.0.0.1 -e ERLANG_COOKIE=123 -e LOGPLEX_TOKEN=$LOGPLEX_TOKEN -e REPO=bar gigalixir-run-16 init bar foreground
-docker run --rm -P -e APP_KEY=$APP_KEY -e MY_POD_IP=127.0.0.1 -e ERLANG_COOKIE=123 -e LOGPLEX_TOKEN=$LOGPLEX_TOKEN -e REPO=bar gigalixir-run job mix help
-docker run --rm -P -e APP_KEY=$APP_KEY -e MY_POD_IP=127.0.0.1 -e ERLANG_COOKIE=123 -e LOGPLEX_TOKEN=$LOGPLEX_TOKEN -e REPO=bar --entrypoint="" gigalixir-run /usr/bin/dumb-init -- gigalixir_run job -- mix --version
+gigalixir rollback -r 682 -a bar
+docker run --rm -P -e PORT=4000 -e APP_KEY=$APP_KEY -e MY_POD_IP=127.0.0.1 -e ERLANG_COOKIE=123 -e LOGPLEX_TOKEN=$LOGPLEX_TOKEN -e REPO=bar -e SECRET_KEY_BASE=$SECRET_KEY_BASE gigalixir-run-18 init bar foreground
 ```
 
 # then exec into the container and run
@@ -50,46 +46,60 @@ gigalixir_run remote_console
 gigalixir_run run -- mix help
 ```
 
-# for distillery app
-
+Test other commands
 ```
-gigalixir rollback -r 334 -a bar
-docker run --rm -P -e APP_KEY=$APP_KEY -e MY_POD_IP=127.0.0.1 -e ERLANG_COOKIE=123 -e LOGPLEX_TOKEN=$LOGPLEX_TOKEN gigalixir-run init bar foreground
-docker run --rm -P -e APP_KEY=$APP_KEY -e MY_POD_IP=127.0.0.1 -e ERLANG_COOKIE=123 -e LOGPLEX_TOKEN=$LOGPLEX_TOKEN gigalixir-run job bin/gigalixir-getting-started help
+# this is the command used by app_controller.ex#run
+docker run --rm -P -e APP_KEY=$APP_KEY -e MY_POD_IP=127.0.0.1 -e ERLANG_COOKIE=123 -e LOGPLEX_TOKEN=$LOGPLEX_TOKEN -e REPO=bar -e SECRET_KEY_BASE=$SECRET_KEY_BASE gigalixir-run-18 job mix help
+docker run --rm -P -e APP_KEY=$APP_KEY -e MY_POD_IP=127.0.0.1 -e ERLANG_COOKIE=123 -e LOGPLEX_TOKEN=$LOGPLEX_TOKEN -e REPO=bar -e SECRET_KEY_BASE=$SECRET_KEY_BASE --entrypoint="" gigalixir-run-18 /usr/bin/dumb-init -- gigalixir_run job -- mix --version
 ```
 
-# then exec into the container and run
-docker ps # find the port
-ssh root@localhost -p $port
+Repeat for gigalixir-run-16
 
+# for distillery app. maybe deprecate this since it's been a long time since distillery 2 has been out and I don't have a good test repo anymore. release 689 here is actually 334 and doesn't work with postgres anymore cuz of a parse error..
 
-```
-gigalixir_run remote_console
-gigalixir_run run -- remote_console 
+# ```
+# gigalixir rollback -r 689 -a bar
+# docker run --rm -P -e PORT=4000 -e APP_KEY=$APP_KEY -e MY_POD_IP=127.0.0.1 -e ERLANG_COOKIE=123 -e LOGPLEX_TOKEN=$LOGPLEX_TOKEN -e REPO=bar -e SECRET_KEY_BASE=$SECRET_KEY_BASE gigalixir-run-18 init bar foreground
+# ```
+# 
+# # then exec into the container and run
+# docker ps # find the port
+# ssh root@localhost -p $port
+# 
+# 
+# ```
+# gigalixir_run remote_console
+# gigalixir_run run -- remote_console 
+# 
+# # go and change the DATABASE_URL if needed, but do not re-run rollback because rollback also rolls back the DATABASE_URL!
+# gigalixir_run migrate
+# gigalixir_run run -- eval "'Elixir.Ecto.Migrator':run(lists:nth(1, 'Elixir.Application':get_env(gigalixir_getting_started, ecto_repos)), 'Elixir.Application':app_dir(gigalixir_getting_started, <<\"priv/repo/migrations\">>), up, [{all, true}])"
+# gigalixir rollback -r 335 -a bar
+# gigalixir_run upgrade 0.0.2 # 3f336 -> dba65a
+# ```
 
-# go and change the DATABASE_URL if needed, but do not re-run rollback!
-gigalixir_run migrate
-gigalixir_run run -- eval "'Elixir.Ecto.Migrator':run(lists:nth(1, 'Elixir.Application':get_env(gigalixir_getting_started, ecto_repos)), 'Elixir.Application':app_dir(gigalixir_getting_started, <<\"priv/repo/migrations\">>), up, [{all, true}])"
-gigalixir rollback -r 335 -a bar
-gigalixir_run upgrade 0.0.2 # 3f336 -> dba65a
-```
+# check jobs
+# docker run --rm -P -e APP_KEY=$APP_KEY -e MY_POD_IP=127.0.0.1 -e ERLANG_COOKIE=123 -e LOGPLEX_TOKEN=$LOGPLEX_TOKEN -e REPO=bar -e SECRET_KEY_BASE=$SECRET_KEY_BASE gigalixir-run-18 job bin/gigalixir-getting-started help
 
 # for distillery 2.0
-
 ```
-gigalixir rollback -r 376 -a bar
-docker run --rm -P -e APP_KEY=$APP_KEY -e MY_POD_IP=127.0.0.1 -e ERLANG_COOKIE=123 -e LOGPLEX_TOKEN=$LOGPLEX_TOKEN gigalixir-run init bar foreground
+gigalixir rollback -r 703 -a bar
+docker run --rm -P -e PORT=4000 -e APP_KEY=$APP_KEY -e MY_POD_IP=127.0.0.1 -e ERLANG_COOKIE=123 -e LOGPLEX_TOKEN=$LOGPLEX_TOKEN -e REPO=bar -e SECRET_KEY_BASE=$SECRET_KEY_BASE gigalixir-run-18 init bar foreground
 # ssh in and
+gigalixir_run migrate
 gigalixir_run distillery_eval -- "Ecto.Migrator.run(List.first(Application.get_env(:gigalixir_getting_started, :ecto_repos)), Application.app_dir(:gigalixir_getting_started, \"priv/repo/migrations\"), :up, all: true)"
 gigalixir_run run -- remote_console 
 ```
 
-# for elixir releases 
+gigalixir rollback -r 704 -a bar
+# ssh in and 
+gigalixir_run upgrade 0.2.0 
 
+# for elixir releases 
 ```
-gigalixir rollback -r 548 -a bar
-docker run --rm -P -e APP_KEY=$APP_KEY -e MY_POD_IP=127.0.0.1 -e ERLANG_COOKIE=123 -e LOGPLEX_TOKEN=$LOGPLEX_TOKEN -e REPO=bar gigalixir-run job -- bin/gigalixir_getting_started eval 'IO.inspect 123+123'
-docker run --rm -P -e APP_KEY=$APP_KEY -e MY_POD_IP=127.0.0.1 -e ERLANG_COOKIE=123 -e LOGPLEX_TOKEN=$LOGPLEX_TOKEN gigalixir-run init bar start
+gigalixir rollback -r 707 -a bar
+docker run --rm -P -e APP_KEY=$APP_KEY -e MY_POD_IP=127.0.0.1 -e ERLANG_COOKIE=123 -e LOGPLEX_TOKEN=$LOGPLEX_TOKEN -e REPO=bar -e SECRET_KEY_BASE=$SECRET_KEY_BASE gigalixir-run-18 job -- bin/gigalixir_getting_started eval 'IO.inspect 123+123'
+docker run --rm -P -e APP_KEY=$APP_KEY -e MY_POD_IP=127.0.0.1 -e ERLANG_COOKIE=123 -e LOGPLEX_TOKEN=$LOGPLEX_TOKEN -e REPO=bar -e SECRET_KEY_BASE=$SECRET_KEY_BASE gigalixir-run-18 init bar start
 ```
 
 # ssh in and
