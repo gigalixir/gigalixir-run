@@ -2,6 +2,14 @@ GIGALIXIR's app run environment. The Dockerfile here describes what is running o
 
 # Development
 
+# Decrypt secrets needed for the docker images
+```
+cp encrypted_secrets/ssh_host_keys.tar.asc secrets/
+cd secrets
+gpg -d ssh_host_keys.tar.asc > ssh_host_keys.tar
+tar xf ssh_host_keys.tar
+```
+
 ```
 python3 -m venv venv3
 source venv3/bin/activate
@@ -119,8 +127,21 @@ docker run --rm -p 4000:4000 -e APP_KEY=$APP_KEY -e MY_POD_IP=127.0.0.1 -e ERLAN
 # Deploy
 
 ```
-docker build --rm -t us.gcr.io/gigalixir-152404/run . && docker build --rm -t us.gcr.io/gigalixir-152404/run-16 . -f Dockerfile.heroku-16 && docker build --rm -t us.gcr.io/gigalixir-152404/run-18 . -f Dockerfile.heroku-18
-gcloud docker -- push us.gcr.io/gigalixir-152404/run && gcloud docker -- push us.gcr.io/gigalixir-152404/run-16 && gcloud docker -- push us.gcr.io/gigalixir-152404/run-18
+# if already built, run
+docker tag gigalixir-run-16 us.gcr.io/gigalixir-152404/run-16
+docker tag gigalixir-run-18 us.gcr.io/gigalixir-152404/run-18
+
+# if need to build, run
+docker build --rm -t us.gcr.io/gigalixir-152404/run-16 . -f Dockerfile.heroku-16 
+docker build --rm -t us.gcr.io/gigalixir-152404/run-18 . -f Dockerfile.heroku-18
+
+# push
+gcloud docker -- push us.gcr.io/gigalixir-152404/run-16 
+gcloud docker -- push us.gcr.io/gigalixir-152404/run-18
+
+# deprecated
+# docker build --rm -t us.gcr.io/gigalixir-152404/run . 
+# gcloud docker -- push us.gcr.io/gigalixir-152404/run 
 ```
 
 # Push dev tag

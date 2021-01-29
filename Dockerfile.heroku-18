@@ -36,6 +36,10 @@ RUN mkdir -p /opt/gigalixir
 RUN mkdir -p /release-config
 RUN python3.8 -m venv /tmp/gigalixir
 RUN chmod og+x /tmp/gigalixir/bin/activate
+# copy over host keys so customers don't key host key verification check failed
+ADD secrets/gigalixir-18/etc/ssh /etc/ssh
+
+# overwrite ssh config with the one we really want although they're probably identical
 COPY etc/ssh/sshd_config /etc/ssh/sshd_config
 COPY bashrc /app/.bashrc
 RUN cp /root/.profile /app/.profile
