@@ -31,6 +31,8 @@ docker build --rm -t gigalixir-run .
 docker build --rm -t gigalixir-run-16 . -f Dockerfile.heroku-16
 # for heroku-18, use
 docker build --rm -t gigalixir-run-18 . -f Dockerfile.heroku-18
+# for heroku-20, use
+docker build --rm -t gigalixir-run-20 . -f Dockerfile.heroku-20
 export APP_KEY=""
 export LOGPLEX_TOKEN=""
 ```

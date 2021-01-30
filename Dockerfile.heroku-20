@@ -1,14 +1,17 @@
 FROM heroku/heroku:20
 
+# avoid https://askubuntu.com/questions/876240/how-to-automate-setting-up-of-keyboard-configuration-package
+ARG DEBIAN_FRONTEND=noninteractive
+
 # install python 3.8
 RUN apt-get update && apt-get install -y software-properties-common && add-apt-repository ppa:deadsnakes/ppa
 RUN apt-get update 
-RUN apt-get install -y build-essential python3.8 python3.8-dev python3.8-venv
+RUN apt-get install -y build-essential python3.8 python3.8-dev python3.8-venv python3-distutils
 
 # install other packages
 # pdftk is not available in this image yet 
 # see https://askubuntu.com/questions/1029450/how-to-install-pdftk-on-ubuntu-18-04-bionic
-RUN apt-get update && apt-get -y install jq wkhtmltopdf xvfb cron
+RUN apt-get -y install jq wkhtmltopdf xvfb cron
 
 # install pip
 RUN curl https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py
