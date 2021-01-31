@@ -132,14 +132,17 @@ docker run --rm -p 4000:4000 -e APP_KEY=$APP_KEY -e MY_POD_IP=127.0.0.1 -e ERLAN
 # if already built, run
 docker tag gigalixir-run-16 us.gcr.io/gigalixir-152404/run-16
 docker tag gigalixir-run-18 us.gcr.io/gigalixir-152404/run-18
+docker tag gigalixir-run-20 us.gcr.io/gigalixir-152404/run-20
 
 # if need to build, run
 docker build --rm -t us.gcr.io/gigalixir-152404/run-16 . -f Dockerfile.heroku-16 
 docker build --rm -t us.gcr.io/gigalixir-152404/run-18 . -f Dockerfile.heroku-18
+docker build --rm -t us.gcr.io/gigalixir-152404/run-20 . -f Dockerfile.heroku-20
 
 # push
 gcloud docker -- push us.gcr.io/gigalixir-152404/run-16 
 gcloud docker -- push us.gcr.io/gigalixir-152404/run-18
+gcloud docker -- push us.gcr.io/gigalixir-152404/run-20
 
 # deprecated
 # docker build --rm -t us.gcr.io/gigalixir-152404/run . 
