@@ -167,7 +167,7 @@ def maybe_start_epmd():
         os.symlink(epmd_path, '/usr/local/bin/epmd')
 
 # DEPRECATED: we just use job now and require the user to pass in bin/app command <mod> <fun>
-# used by the old gigalixir run that won't be available soon. delete this once giglaixir run is changed.
+# used by the old gigalixir run that won't be available soon. delete this once gigalixir run is changed.
 @cli.command()
 @click.argument('cmd', nargs=-1)
 @click.pass_context
